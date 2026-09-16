@@ -78,6 +78,8 @@ TELEMETRY_LOCK = threading.Lock()
 LAST_TELEMETRY = None
 SCENARIO_LOCK = threading.Lock()
 CURRENT_SCENARIO = None
+ERROR_LOCK = threading.Lock()
+LAST_ANALYSIS_ERROR = ""
 
 
 def read_text_tail(path, limit=1600):
@@ -352,6 +354,17 @@ def set_current_scenario(scenario):
 def current_scenario():
     with SCENARIO_LOCK:
         return dict(CURRENT_SCENARIO) if CURRENT_SCENARIO else None
+
+
+def set_analysis_error(message):
+    global LAST_ANALYSIS_ERROR
+    with ERROR_LOCK:
+        LAST_ANALYSIS_ERROR = message or ""
+
+
+def current_analysis_error():
+    with ERROR_LOCK:
+        return LAST_ANALYSIS_ERROR
 
 
 def devkit_ssh_open(timeout=1.0):
@@ -639,8 +652,11 @@ def start_analysis_session(filename, scenario, local_path=None):
         result["analysis_started"] = True
         result["app"] = app
         result["message"] = f"{scenario_payload.get('title', safe_name)} is running"
+        set_analysis_error("")
     except Exception as exc:
-        result["analysis_error"] = str(exc)
+        error = str(exc)
+        set_analysis_error(error)
+        result["analysis_error"] = error
         result["app"] = app_state()
         result["message"] = f"{safe_name} is streaming; analysis did not start"
     return result
@@ -649,6 +665,7 @@ def start_analysis_session(filename, scenario, local_path=None):
 def prepare_analysis_session(filename, scenario, local_path=None):
     stop_app()
     clear_outputs()
+    set_analysis_error("")
     safe_name = assign_insight_source(filename, local_path)
     scenario_payload = dict(scenario)
     scenario_payload["file"] = safe_name
@@ -694,8 +711,11 @@ def run_prepared_session():
         result["analysis_started"] = True
         result["app"] = app
         result["message"] = f"{scenario.get('title', filename)} is running"
+        set_analysis_error("")
     except Exception as exc:
-        result["analysis_error"] = str(exc)
+        error = str(exc)
+        set_analysis_error(error)
+        result["analysis_error"] = error
         result["app"] = app_state()
         result["message"] = f"{filename} is streaming; analysis did not start"
     return result
@@ -707,6 +727,7 @@ def reset_session():
     cleanup_temp_uploads()
     clear_outputs()
     set_current_scenario({})
+    set_analysis_error("")
     return {"message": "session reset", "app": app_state(), "source": source_status()}
 
 
@@ -845,6 +866,7 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
                 "devkit_ssh_open": devkit_ssh_open(),
                 "presets": [public_preset(preset) for preset in PRESETS],
                 "scenario": current_scenario(),
+                "analysis_error": current_analysis_error(),
                 "app": app_state(),
                 "telegram": public_telegram_status(),
                 "vlm": vlm_settings(),

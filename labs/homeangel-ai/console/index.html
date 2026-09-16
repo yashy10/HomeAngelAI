@@ -1661,6 +1661,12 @@
         setPill(el.selectDevkitStatus, status.devkit_ssh_open ? "DevKit ready" : "DevKit SSH closed", status.devkit_ssh_open ? "good" : "warn");
         updateTelegramStatus(status.telegram);
         updateVlmStatus(status.vlm);
+        if (status.analysis_error) {
+          state.analysisAttempted = true;
+          state.analysisError = status.analysis_error;
+        } else if (!state.launchingAnalysis && !state.analysisStarted) {
+          state.analysisError = "";
+        }
         const app = status.app || {};
         const sourceState = status.source && status.source.state;
         state.streamStarted = sourceState === "playing";
