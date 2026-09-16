@@ -163,6 +163,8 @@ vlm:
   port: 9998
   models: Gemma-4-E4B-it,Qwen3-VL-4B-Instruct-GPTQ-a16w4
   model_paths: Gemma-4-E4B-it=/media/nvme/llima/models/gemma-4-E4B-it-GPTQ-a16w4,Qwen3-VL-4B-Instruct-GPTQ-a16w4=/media/nvme/llima/models/Qwen3-VL-4B-Instruct-GPTQ-a16w4
+  max_tokens: 220
+  crop_padding: 0.60
 ```
 
 Deploy or copy the Gemma 4 E4B LLiMa model directory onto the DevKit, then update
@@ -185,6 +187,11 @@ If Gemma is not installed but the Qwen fallback path is installed, the launcher
 serves Qwen and the app falls back to that model name. VLM descriptions are added
 only after `FALL_CONFIRMED`, and only the resulting text joins the JSON/Telegram
 event.
+
+The demo prompt asks for a 35-60 word family-alert scene description with visible
+posture, nearby furniture or floor context, and the obvious safety concern. Keep
+the crop padding high enough for room context; a tight person-only crop tends to
+produce generic descriptions.
 
 Finite smoke test:
 

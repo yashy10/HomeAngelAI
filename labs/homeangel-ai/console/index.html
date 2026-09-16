@@ -2129,8 +2129,8 @@
       const zone = event.zone_label || "unknown zone";
       const device = event.device_id || "unknown device";
       const confidence = fmtNumber(event.confidence, 2);
-      let text = `HomeAngel AI fall detected in ${zone}. Device ${device}. Track ${event.track_id}. Confidence ${confidence}.`;
-      if (event.description) text += ` ${event.description}`;
+      let text = `HomeAngel AI fall alert\nZone: ${zone}\nDevice: ${device}\nTrack: ${event.track_id}\nConfidence: ${confidence}`;
+      if (event.description) text += `\nScene: ${event.description}`;
       return text;
     }
 

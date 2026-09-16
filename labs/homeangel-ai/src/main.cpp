@@ -189,16 +189,21 @@ struct AppConfig {
   int vlm_port = 9998;
   std::vector<std::string> vlm_models;
   std::string vlm_model_paths;
-  int vlm_max_tokens = 96;
-  double vlm_timeout_seconds = 20.0;
+  int vlm_max_tokens = 220;
+  double vlm_timeout_seconds = 25.0;
   int vlm_jpeg_quality = 78;
-  double vlm_crop_padding = 0.20;
+  double vlm_crop_padding = 0.60;
   std::string vlm_system_prompt =
-      "You are HomeAngel's local safety analyst. Describe only visible safety context. "
-      "Do not identify the person.";
+      "You are HomeAngel AI's local safety analyst. Describe only visible home-safety "
+      "context from the image. Do not identify the person, guess demographics, or make "
+      "a medical diagnosis.";
   std::string vlm_user_prompt =
-      "Briefly describe whether the person appears to be on the floor, motionless, "
-      "getting up, sitting normally, or needing help.";
+      "This frame was captured after HomeAngel's pose tracker confirmed a fall. Write "
+      "a 35 to 60 word family-alert scene description. Include concrete visible details: "
+      "the person's posture or body orientation, where they are relative to nearby "
+      "furniture or floor area, and why someone should check on them now. Do not just "
+      "say the person is on the floor. Use plain language, no bullets, and do not "
+      "identify the person.";
 };
 
 std::string lower_copy(std::string value) {
@@ -816,7 +821,7 @@ std::string base64_encode(const std::vector<unsigned char>& data) {
   return out;
 }
 
-std::string compact_text(std::string text, std::size_t max_chars = 260) {
+std::string compact_text(std::string text, std::size_t max_chars = 520) {
   std::string compact;
   compact.reserve(text.size());
   bool previous_space = false;
@@ -1121,13 +1126,16 @@ private:
       return;
     }
 
-    const std::string text = "HomeAngel AI fall detected in " + cfg_.zone_label +
-                             " (device " + cfg_.device_id + ", track " +
-                             std::to_string(event.at("track_id").get<int>()) + ", confidence " +
-                             std::to_string(event.at("confidence").get<double>()) + ")" +
-                             (event.contains("description")
-                                  ? "\nScene: " + event.at("description").get<std::string>()
-                                  : "");
+    std::ostringstream confidence;
+    confidence << std::fixed << std::setprecision(2)
+               << event.at("confidence").get<double>();
+    std::string text = "HomeAngel AI fall alert\nZone: " + cfg_.zone_label +
+                       "\nDevice: " + cfg_.device_id +
+                       "\nTrack: " + std::to_string(event.at("track_id").get<int>()) +
+                       "\nConfidence: " + confidence.str();
+    if (event.contains("description")) {
+      text += "\nScene: " + event.at("description").get<std::string>();
+    }
 
     for (const auto& chat_id : chat_ids) {
       nlohmann::json body = {{"chat_id", chat_id}, {"text", text}};
