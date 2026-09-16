@@ -17,11 +17,11 @@ if [[ ${#args[@]} -eq 0 ]]; then
 fi
 
 if command -v devkit-run >/dev/null 2>&1; then
-  exec devkit-run "${APP_ROOT}/run_homeangel.sh" "${args[@]}"
+  exec devkit-run "${APP_ROOT}/build/homeangel-ai" "${args[@]}"
 fi
 
 if declare -F dk >/dev/null 2>&1; then
-  exec dk "${APP_ROOT}/run_homeangel.sh" "${args[@]}"
+  exec dk "${APP_ROOT}/build/homeangel-ai" "${args[@]}"
 fi
 
 if [[ -n "${DEVKIT_SYNC_DEVKIT_IP:-}" ]]; then
@@ -31,14 +31,16 @@ if [[ -n "${DEVKIT_SYNC_DEVKIT_IP:-}" ]]; then
     -o ConnectTimeout=8 \
     "${DEVKIT_SYNC_DEVKIT_USER:-sima}@${DEVKIT_SYNC_DEVKIT_IP}" \
     bash --noprofile --norc -s -- \
-    "${APP_ROOT}/run_homeangel.sh" "${args[@]}" <<'REMOTE_RUN'
+    "${APP_ROOT}/build/homeangel-ai" "${args[@]}" <<'REMOTE_RUN'
 set -euo pipefail
 target="$1"
 shift
+cd /workspace/labs/homeangel-ai
+export LD_LIBRARY_PATH="/workspace/labs/homeangel-ai/libcompat:/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu/neat/runtime:/usr/lib/aarch64-linux-gnu/neat/gst-plugins:${LD_LIBRARY_PATH:-}"
 exec "${target}" "$@"
 REMOTE_RUN
 fi
 
 echo "DevKit runner not found. Run from the Neat SDK container shell and use:" >&2
-echo "  dk /workspace/labs/homeangel-ai/run_homeangel.sh --config /workspace/labs/homeangel-ai/config.devkit.yaml" >&2
+echo "  dk /workspace/labs/homeangel-ai/build/homeangel-ai --config /workspace/labs/homeangel-ai/config.devkit.yaml" >&2
 exit 1

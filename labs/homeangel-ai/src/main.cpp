@@ -1044,6 +1044,7 @@ private:
 };
 
 std::optional<std::string> env_reference_name(const std::string& value);
+std::string env_value(const std::string& name);
 std::string resolve_env_reference(const std::string& value);
 
 class AlertSink {
@@ -1110,8 +1111,8 @@ private:
   }
 
   void send_telegram(const nlohmann::json& event) const {
-    const char* token = std::getenv(cfg_.telegram_token_env.c_str());
-    if (token == nullptr || std::strlen(token) == 0) {
+    const std::string token = env_value(cfg_.telegram_token_env);
+    if (token.empty()) {
       std::cerr << "[warn] Telegram enabled but " << cfg_.telegram_token_env << " is not set\n";
       return;
     }
@@ -1461,6 +1462,55 @@ bool is_valid_env_name(const std::string& value) {
   return std::all_of(value.begin() + 1, value.end(), is_name_char);
 }
 
+std::map<std::string, std::string> env_file_values() {
+  const char* configured = std::getenv("HOMEANGEL_ENV_FILE");
+  const fs::path env_path =
+      configured != nullptr && std::strlen(configured) > 0
+          ? fs::path(configured)
+          : fs::path("/workspace/labs/homeangel-ai/.env.local");
+  std::ifstream input(env_path);
+  if (!input.is_open()) {
+    return {};
+  }
+
+  std::map<std::string, std::string> values;
+  std::string raw_line;
+  while (std::getline(input, raw_line)) {
+    std::string line = sima_examples::trim_copy(strip_inline_comment(raw_line));
+    if (line.empty()) {
+      continue;
+    }
+    constexpr const char* kExport = "export ";
+    if (line.rfind(kExport, 0) == 0) {
+      line = sima_examples::trim_copy(line.substr(std::strlen(kExport)));
+    }
+    const std::size_t sep = line.find('=');
+    if (sep == std::string::npos) {
+      continue;
+    }
+    const std::string key = sima_examples::trim_copy(line.substr(0, sep));
+    if (!is_valid_env_name(key)) {
+      continue;
+    }
+    values[key] = unquote(line.substr(sep + 1));
+  }
+  return values;
+}
+
+std::string env_value(const std::string& name) {
+  const std::string key = sima_examples::trim_copy(name);
+  if (!is_valid_env_name(key)) {
+    return {};
+  }
+  const char* value = std::getenv(key.c_str());
+  if (value != nullptr && std::strlen(value) > 0) {
+    return value;
+  }
+  const auto values = env_file_values();
+  const auto it = values.find(key);
+  return it == values.end() ? std::string{} : it->second;
+}
+
 std::optional<std::string> env_reference_name(const std::string& value) {
   const std::string trimmed = sima_examples::trim_copy(value);
   std::string name;
@@ -1480,8 +1530,7 @@ std::string resolve_env_reference(const std::string& value) {
   if (!env_name) {
     return sima_examples::trim_copy(value);
   }
-  const char* resolved = std::getenv(env_name->c_str());
-  return resolved == nullptr ? std::string{} : sima_examples::trim_copy(resolved);
+  return sima_examples::trim_copy(env_value(*env_name));
 }
 
 std::vector<AlertRoute> parse_alert_routes(const std::string& value) {

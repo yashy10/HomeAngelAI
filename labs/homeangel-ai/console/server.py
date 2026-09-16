@@ -30,13 +30,13 @@ INSIGHT_SOURCE_INDEX = int(os.environ.get("HOMEANGEL_INSIGHT_SOURCE", "1"))
 DEVKIT_HOST = os.environ.get("HOMEANGEL_DEVKIT_HOST", "192.168.1.20")
 APP_CONFIG = Path(os.environ.get("HOMEANGEL_APP_CONFIG", str(APP_ROOT / "config.devkit.yaml")))
 APP_BINARY = Path(os.environ.get("HOMEANGEL_APP_BINARY", str(APP_ROOT / "build/homeangel-ai")))
-APP_RUNNER = Path(os.environ.get("HOMEANGEL_APP_RUNNER", str(APP_ROOT / "run_homeangel.sh")))
 ENV_FILE = Path(os.environ.get("HOMEANGEL_ENV_FILE", str(APP_ROOT / ".env.local")))
 APP_LOG = APP_ROOT / "console_app.log"
 OUTPUT_FILES = [
     APP_ROOT / "events.log",
     APP_ROOT / "telemetry.json",
     APP_ROOT / "telemetry.json.tmp",
+    APP_ROOT / "console_app.log",
 ]
 PRESETS = [
     {
@@ -571,8 +571,6 @@ def start_app():
     global APP_PROCESS
     if not APP_BINARY.exists():
         raise RuntimeError(f"app binary not found: {APP_BINARY}")
-    if not APP_RUNNER.exists():
-        raise RuntimeError(f"app runner not found: {APP_RUNNER}")
     if not APP_CONFIG.exists():
         raise RuntimeError(f"app config not found: {APP_CONFIG}")
     if not devkit_ssh_open():
@@ -585,7 +583,7 @@ def start_app():
         clear_outputs()
         APP_LOG.parent.mkdir(parents=True, exist_ok=True)
         log_file = APP_LOG.open("ab", buffering=0)
-        command_parts = ["dk", str(APP_RUNNER), "--config", str(APP_CONFIG)]
+        command_parts = ["dk", str(APP_BINARY), "--config", str(APP_CONFIG)]
         command = " ".join(shlex.quote(part) for part in command_parts)
         APP_PROCESS = subprocess.Popen(
             ["bash", "-lic", command],

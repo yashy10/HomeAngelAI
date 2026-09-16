@@ -1275,6 +1275,8 @@
       activeMediaUrl: "",
       streamStarted: false,
       analysisStarted: false,
+      analysisAttempted: false,
+      analysisError: "",
       launchingAnalysis: false,
       lastVelocityCrossing: false,
       lastAngleCrossing: false,
@@ -1596,6 +1598,8 @@
         state.firstEventPoll = true;
         state.streamStarted = false;
         state.analysisStarted = false;
+        state.analysisAttempted = false;
+        state.analysisError = "";
         clearVideoSource();
         resetPhoneMessage();
         setMessage("Reset complete.");
@@ -1623,6 +1627,7 @@
       if (result.media_url) setVideoSource(result.media_url);
       if (typeof result.stream_started === "boolean") state.streamStarted = result.stream_started;
       if (typeof result.analysis_started === "boolean") state.analysisStarted = result.analysis_started;
+      if (result.analysis_error) state.analysisError = result.analysis_error;
       if (result.prepared && !result.stream_started) {
         el.analysisFooter.textContent = "Video is loaded locally. Press the center button to start stream analysis.";
       }
@@ -1660,7 +1665,13 @@
         const sourceState = status.source && status.source.state;
         state.streamStarted = sourceState === "playing";
         if (app.running) {
+          state.analysisError = "";
           setPill(el.analysisAppStatus, "app running", "good");
+        } else if (state.analysisAttempted && state.analysisError) {
+          setPill(el.analysisAppStatus, "app offline", "bad");
+        } else if (state.analysisAttempted && status.devkit_ssh_open === false) {
+          state.analysisError = `DevKit SSH is not reachable at ${status.devkit_host}:22`;
+          setPill(el.analysisAppStatus, "app offline", "bad");
         } else if (state.activeMediaUrl && !state.launchingAnalysis) {
           setPill(el.analysisAppStatus, "ready", "warn");
         } else {
@@ -1671,6 +1682,7 @@
           el.analysisFooter.textContent = "Video is loaded locally. Press the center button to start stream analysis.";
         }
         if (status.media_url) setVideoSource(status.media_url, false);
+        updateFinding();
       } catch {
         setPill(el.selectInsightStatus, "status unavailable", "bad");
         setPill(el.analysisInsightStatus, "status unavailable", "bad");
@@ -1766,7 +1778,13 @@
       let mode = "safe";
       let risk = 8;
 
-      if (hasFall || currentState === "FALL_CONFIRMED") {
+      if (state.analysisAttempted && state.analysisError && !state.analysisStarted) {
+        title = "Analyzer offline";
+        copy = state.analysisError;
+        pill = "needs DevKit";
+        mode = "watch";
+        risk = 0;
+      } else if (hasFall || currentState === "FALL_CONFIRMED") {
         title = "Fall detected";
         copy = "Confirmed fall event emitted as JSON metadata.";
         pill = "alert sent";
@@ -1878,6 +1896,8 @@
     async function startAnalysisIfNeeded() {
       if (state.analysisStarted || state.launchingAnalysis) return;
       state.launchingAnalysis = true;
+      state.analysisAttempted = true;
+      state.analysisError = "";
       updateVideoMode();
       setPill(el.analysisAppStatus, "starting", "warn");
       el.analysisFooter.textContent = "Starting local Insight stream and DevKit analysis...";
@@ -1887,15 +1907,18 @@
         state.streamStarted = Boolean(result.stream_started);
         state.analysisStarted = Boolean(result.analysis_started);
         if (result.analysis_error) {
-          setPill(el.analysisAppStatus, "app waiting", "warn");
+          state.analysisError = result.analysis_error;
+          setPill(el.analysisAppStatus, "app offline", "bad");
           el.analysisFooter.textContent = result.analysis_error;
         } else {
+          state.analysisError = "";
           setPill(el.analysisAppStatus, "app running", "good");
           el.analysisFooter.textContent = result.message || "Local stream analysis is running.";
         }
       } catch (error) {
+        state.analysisError = error.message || String(error);
         setPill(el.analysisAppStatus, "start failed", "bad");
-        el.analysisFooter.textContent = error.message || String(error);
+        el.analysisFooter.textContent = state.analysisError;
         throw error;
       } finally {
         state.launchingAnalysis = false;
