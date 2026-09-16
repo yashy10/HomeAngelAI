@@ -31,6 +31,7 @@ DEVKIT_HOST = os.environ.get("HOMEANGEL_DEVKIT_HOST", "192.168.1.20")
 APP_CONFIG = Path(os.environ.get("HOMEANGEL_APP_CONFIG", str(APP_ROOT / "config.devkit.yaml")))
 APP_BINARY = Path(os.environ.get("HOMEANGEL_APP_BINARY", str(APP_ROOT / "build/homeangel-ai")))
 APP_RUNNER = Path(os.environ.get("HOMEANGEL_APP_RUNNER", str(APP_ROOT / "run_homeangel.sh")))
+ENV_FILE = Path(os.environ.get("HOMEANGEL_ENV_FILE", str(APP_ROOT / ".env.local")))
 APP_LOG = APP_ROOT / "console_app.log"
 OUTPUT_FILES = [
     APP_ROOT / "events.log",
@@ -93,6 +94,36 @@ def split_csv(value):
     return [item.strip() for item in str(value).split(",") if item.strip()]
 
 
+def env_file_values():
+    values = {}
+    try:
+        lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return values
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            parts = shlex.split(line, comments=True, posix=True)
+        except ValueError:
+            continue
+        if parts and parts[0] == "export":
+            parts = parts[1:]
+        for part in parts:
+            key, sep, value = part.partition("=")
+            if sep and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+                values[key] = value
+    return values
+
+
+def env_value(name):
+    value = os.environ.get(str(name or ""))
+    if value:
+        return value
+    return env_file_values().get(str(name or ""), "")
+
+
 def load_config_doc():
     if yaml is None:
         raise RuntimeError("PyYAML is required to read Telegram settings")
@@ -140,7 +171,7 @@ def env_reference_name(value):
 def resolve_env_reference(value):
     env_name = env_reference_name(value)
     if env_name:
-        return os.environ.get(env_name, "").strip()
+        return env_value(env_name).strip()
     return str(value or "").strip()
 
 
@@ -178,7 +209,7 @@ def telegram_settings():
             chat_ids.append(resolved_chat)
         elif env_name:
             missing_chat_envs.append(env_name)
-    token_present = bool(os.environ.get(token_env))
+    token_present = bool(env_value(token_env))
     return {
         "enabled": enabled,
         "ready": enabled and token_present and bool(chat_ids),
@@ -259,7 +290,7 @@ def send_telegram_text(message):
     if not settings.get("enabled"):
         raise RuntimeError("Telegram is disabled in config.devkit.yaml")
     token_env = settings.get("token_env") or "HOMEANGEL_TELEGRAM_BOT_TOKEN"
-    token = os.environ.get(token_env)
+    token = env_value(token_env)
     if not token:
         raise RuntimeError(f"Telegram token missing: export {token_env} before starting the console")
     chat_ids = settings.get("_chat_ids") or []

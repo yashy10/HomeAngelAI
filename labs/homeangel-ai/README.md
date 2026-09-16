@@ -348,7 +348,10 @@ export HOMEANGEL_TELEGRAM_CHAT_ID="<chat-id>"
 ```
 
 `AngelStart`, `serve_console.sh`, and `run_homeangel.sh` load `.env.local`
-automatically. You can also export the same variables in the shell instead.
+automatically. You can also export the same variables in the shell instead. The
+console server rereads `.env.local` when checking Telegram status or sending a
+manual phone-panel message, so filling the file and refreshing the page is enough
+for that UI to show ready.
 
 The routing stays in `/workspace/labs/homeangel-ai/config.devkit.yaml`:
 
