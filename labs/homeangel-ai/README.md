@@ -260,7 +260,7 @@ Keep this server local to the demo network. It is not part of the production fam
 The console opens with a source-selection page. Pick one of three cached local presets or upload a local video file:
 
 - `Fall Alert`: `demo.mp4`, expected to emit a `fall_detected` JSON event and move the risk bar to `Risky`.
-- `Multi-Room Scan`: four local feeds. Feed 1 is the Bedroom fall clip; feeds 2-4 are safe activity clips. The detector should identify the Bedroom feed as risky and emit one event naming that zone/feed.
+- `Multi-Room Scan`: four different local feeds. Bedroom uses `demo.mp4` for the fall, Hallway uses `adl_sitdown.mp4`, Kitchen uses `gmdcsa_subject1_adl_01.mp4`, and Living Room uses `gmdcsa_subject1_adl_02.mp4`. The detector should identify the Bedroom feed as risky and emit one event naming that zone/feed.
 - `Routine Activity`: `routine_adl.mp4`, pulled from the local GMDCSA cache and expected to stay safe.
 
 `Analyze Selected` uploads/assigns the clip to Insight source `1`, or assigns the
