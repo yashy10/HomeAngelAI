@@ -468,6 +468,44 @@
       object-fit: contain;
     }
 
+    .multi-feed-grid {
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      display: none;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .feed-frame.multi .multi-feed-grid {
+      display: grid;
+    }
+
+    .feed-frame.multi > video {
+      display: none;
+    }
+
+    .multi-feed-tile {
+      min-width: 0;
+      min-height: 0;
+      background: #050607;
+      overflow: hidden;
+    }
+
+    .multi-feed-tile video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+    }
+
+    .feed-frame.multi .play-overlay {
+      width: min(142px, 30%);
+    }
+
     .feed-hidden {
       width: 100%;
       height: 100%;
@@ -1152,8 +1190,9 @@
             <span>Local Live Feed</span>
             <span id="videoMode">paused</span>
           </div>
-          <div class="feed-frame">
+          <div class="feed-frame" id="feedFrame">
             <video id="localVideo" title="Local video preview" preload="metadata" playsinline></video>
+            <div class="multi-feed-grid" id="multiFeedGrid" hidden></div>
             <button class="play-overlay" id="playOverlayButton" type="button" aria-label="Play local video">
               <span id="playOverlayLabel">PAUSED</span>
             </button>
@@ -1273,6 +1312,8 @@
       scenario: null,
       liveFeedVisible: true,
       activeMediaUrl: "",
+      activeMediaUrls: [],
+      multiVideos: [],
       streamStarted: false,
       analysisStarted: false,
       analysisAttempted: false,
@@ -1311,7 +1352,9 @@
       vlmStatus: document.getElementById("vlmStatus"),
       liveToggleButton: document.getElementById("liveToggleButton"),
       backButton: document.getElementById("backButton"),
+      feedFrame: document.getElementById("feedFrame"),
       localVideo: document.getElementById("localVideo"),
+      multiFeedGrid: document.getElementById("multiFeedGrid"),
       playOverlayButton: document.getElementById("playOverlayButton"),
       playOverlayLabel: document.getElementById("playOverlayLabel"),
       feedHidden: document.getElementById("feedHidden"),
@@ -1443,6 +1486,7 @@
       if (value === "fall_detected") return "fall detected";
       if (value === "safe_sit") return "sit observed, no alert";
       if (value === "safe_activity") return "routine activity, no alert";
+      if (value === "bedroom_risk_detected") return "risky feed identified";
       return "configured analysis";
     }
 
@@ -1495,7 +1539,7 @@
       card.querySelector(".source-function").textContent = fmtFunction(source.function);
       card.querySelector(".source-summary").textContent = source.summary || "";
       const foot = card.querySelectorAll(".source-foot span");
-      foot[0].textContent = source.file || "";
+      foot[0].textContent = source.multi ? `${source.streams.length} feeds` : source.file || "";
       foot[1].textContent = fmtExpected(source.expected);
       card.addEventListener("click", () => {
         state.selectedType = "preset";
@@ -1548,7 +1592,9 @@
       el.selectedFunction.textContent = fmtFunction(source.function);
       el.selectedExpected.textContent = fmtExpected(source.expected);
       el.selectedFile.textContent = source.file;
-      el.selectedStorage.textContent = source.temporary ? "temporary local session" : "cached local preset";
+      el.selectedStorage.textContent = source.multi
+        ? `${source.streams.length} cached local feeds`
+        : source.temporary ? "temporary local session" : "cached local preset";
     }
 
     function setBusy(isBusy) {
@@ -1620,11 +1666,23 @@
       const scenario = result.scenario || state.scenario || selectedSource();
       state.scenario = scenario;
       el.analysisTitle.textContent = scenario.title || "HomeAngel Analysis";
-      el.analysisSubtitle.textContent = `${scenario.file || "video"} | ${fmtFunction(scenario.function)}`;
+      el.analysisSubtitle.textContent = scenarioIsMulti()
+        ? `${scenario.streams.length} local feeds | ${fmtFunction(scenario.function)}`
+        : `${scenario.file || "video"} | ${fmtFunction(scenario.function)}`;
       el.analysisFooter.textContent = scenario.temporary
         ? "Uploaded clip is temporary local Insight media for this session."
         : "Cached preset is local. Production mode is headless.";
-      if (result.media_url) setVideoSource(result.media_url);
+      const scenarioStreams = Array.isArray(scenario.streams) ? scenario.streams : [];
+      const responseUrls = Array.isArray(result.media_urls) ? result.media_urls : [];
+      if (responseUrls.length > 1 || scenarioStreams.length > 1) {
+        const streams = scenarioStreams.map((stream, index) => ({
+          ...stream,
+          media_url: stream.media_url || responseUrls[index]
+        })).filter(stream => stream.media_url);
+        setMultiVideoSources(streams);
+      } else if (result.media_url) {
+        setVideoSource(result.media_url);
+      }
       if (typeof result.stream_started === "boolean") state.streamStarted = result.stream_started;
       if (typeof result.analysis_started === "boolean") state.analysisStarted = result.analysis_started;
       if (result.analysis_error) state.analysisError = result.analysis_error;
@@ -1639,8 +1697,9 @@
       el.liveToggleButton.textContent = visible ? "Hide Live Feed" : "Show Live Feed";
       el.liveToggleButton.setAttribute("aria-pressed", String(visible));
       el.feedHidden.hidden = visible;
-      el.localVideo.hidden = !visible;
-      if (!visible) el.localVideo.pause();
+      el.localVideo.hidden = !visible || scenarioIsMulti();
+      el.multiFeedGrid.hidden = !visible || !scenarioIsMulti();
+      if (!visible) allPreviewVideos().forEach(video => video.pause());
       updateVideoMode();
     }
 
@@ -1668,8 +1727,10 @@
           state.analysisError = "";
         }
         const app = status.app || {};
-        const sourceState = status.source && status.source.state;
-        state.streamStarted = sourceState === "playing";
+        const sourceStates = Array.isArray(status.sources) && status.sources.length
+          ? status.sources.map(source => source && source.state)
+          : [status.source && status.source.state];
+        state.streamStarted = sourceStates.some(sourceState => sourceState === "playing");
         if (app.running) {
           state.analysisError = "";
           setPill(el.analysisAppStatus, "app running", "good");
@@ -1678,16 +1739,24 @@
         } else if (state.analysisAttempted && status.devkit_ssh_open === false) {
           state.analysisError = `DevKit SSH is not reachable at ${status.devkit_host}:22`;
           setPill(el.analysisAppStatus, "app offline", "bad");
-        } else if (state.activeMediaUrl && !state.launchingAnalysis) {
+        } else if ((state.activeMediaUrl || state.activeMediaUrls.length) && !state.launchingAnalysis) {
           setPill(el.analysisAppStatus, "ready", "warn");
         } else {
           setPill(el.analysisAppStatus, "app idle", "warn");
         }
         state.analysisStarted = Boolean(app.running);
-        if (!app.running && state.activeMediaUrl && !state.streamStarted) {
+        if (!app.running && (state.activeMediaUrl || state.activeMediaUrls.length) && !state.streamStarted) {
           el.analysisFooter.textContent = "Video is loaded locally. Press the center button to start stream analysis.";
         }
-        if (status.media_url) setVideoSource(status.media_url, false);
+        if (Array.isArray(status.media_urls) && status.media_urls.length > 1 && state.scenario && Array.isArray(state.scenario.streams)) {
+          const streams = state.scenario.streams.map((stream, index) => ({
+            ...stream,
+            media_url: stream.media_url || status.media_urls[index]
+          })).filter(stream => stream.media_url);
+          setMultiVideoSources(streams, false);
+        } else if (status.media_url) {
+          setVideoSource(status.media_url, false);
+        }
         updateFinding();
       } catch {
         setPill(el.selectInsightStatus, "status unavailable", "bad");
@@ -1723,9 +1792,10 @@
       const people = Array.isArray(doc.people) ? doc.people : [];
       const primary = choosePrimaryPerson(people);
       const currentState = normalizeState((primary && primary.state) || doc.state);
+      const zone = (primary && primary.zone_label) || doc.zone_label || "local feed";
       el.stateLine.className = `state-line state-${currentState.toLowerCase().replace("fall_", "")}`;
       el.stateValue.textContent = primary
-        ? `${displayState(currentState)} | track ${primary.track_id}`
+        ? `${displayState(currentState)} | ${zone} | track ${primary.track_id}`
         : displayState(currentState);
 
       const perf = doc.performance || {};
@@ -1776,8 +1846,13 @@
       const people = Array.isArray(telemetry.people) ? telemetry.people : [];
       const primary = choosePrimaryPerson(people);
       const currentState = normalizeState((primary && primary.state) || telemetry.state);
-      const hasFall = state.latestEntries.some(item => item.event && item.event.event === "fall_detected");
+      const fallEvent = latestFallEvent();
+      const hasFall = Boolean(fallEvent);
       const expected = state.scenario && state.scenario.expected;
+      const zone = (fallEvent && fallEvent.zone_label) ||
+        (primary && primary.zone_label) ||
+        telemetry.zone_label ||
+        "local feed";
       let title = "Safe";
       let copy = "No fall signal.";
       let pill = "monitoring";
@@ -1791,8 +1866,8 @@
         mode = "watch";
         risk = 0;
       } else if (hasFall || currentState === "FALL_CONFIRMED") {
-        title = "Fall detected";
-        copy = "Confirmed fall event emitted as JSON metadata.";
+        title = `Fall detected: ${zone}`;
+        copy = `Confirmed fall event emitted for ${zone} as JSON metadata.`;
         pill = "alert sent";
         mode = "risky";
         risk = 100;
@@ -1804,7 +1879,7 @@
         risk = 58;
       } else if (currentState === "DOWN") {
         title = expected === "safe_sit" ? "Sit-down observed" : "Person down";
-        copy = expected === "safe_sit" ? "Still no fall confirmation or alert." : "Down posture is being timed before confirmation.";
+        copy = expected === "safe_sit" ? "Still no fall confirmation or alert." : `${zone} is down and being timed before confirmation.`;
         pill = "timing";
         mode = "watch";
         risk = expected === "safe_sit" ? 34 : 72;
@@ -1824,6 +1899,12 @@
         title = "Fall scenario armed";
         copy = "Waiting for derivative and stillness confirmation.";
         pill = "armed";
+        mode = "safe";
+        risk = 12;
+      } else if (expected === "bedroom_risk_detected") {
+        title = "Four feeds safe";
+        copy = "Multi-room scan is watching for the one feed that becomes risky.";
+        pill = "triage";
         mode = "safe";
         risk = 12;
       } else {
@@ -1853,12 +1934,77 @@
       el.riskCopy.textContent = copy;
     }
 
+    function scenarioIsMulti() {
+      return Boolean(state.scenario && Array.isArray(state.scenario.streams) && state.scenario.streams.length > 1);
+    }
+
+    function allPreviewVideos() {
+      return scenarioIsMulti() ? state.multiVideos : [el.localVideo];
+    }
+
+    function setMultiVideoSources(streams, reset = true) {
+      const urls = streams.map(stream => new URL(stream.media_url, window.location.href).toString());
+      if (JSON.stringify(state.activeMediaUrls) === JSON.stringify(urls)) {
+        updateVideoMode();
+        return;
+      }
+      state.activeMediaUrl = "";
+      state.activeMediaUrls = urls;
+      state.multiVideos = [];
+      el.localVideo.pause();
+      el.localVideo.removeAttribute("src");
+      el.localVideo.load();
+      el.multiFeedGrid.innerHTML = "";
+      streams.forEach(stream => {
+        const tile = document.createElement("div");
+        tile.className = "multi-feed-tile";
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.playsInline = true;
+        video.title = `${stream.zone_label || stream.title || "Local feed"} preview`;
+        video.src = new URL(stream.media_url, window.location.href).toString();
+        video.addEventListener("play", updateVideoMode);
+        video.addEventListener("pause", updateVideoMode);
+        video.addEventListener("ended", handleVideoEnded);
+        video.addEventListener("loadedmetadata", updateVideoMode);
+        video.addEventListener("error", updateVideoMode);
+        tile.appendChild(video);
+        el.multiFeedGrid.appendChild(tile);
+        state.multiVideos.push(video);
+        if (reset) {
+          video.addEventListener("loadedmetadata", () => {
+            try {
+              video.currentTime = 0;
+            } catch {}
+          }, { once: true });
+        }
+      });
+      el.feedFrame.classList.add("multi");
+      el.multiFeedGrid.hidden = !state.liveFeedVisible;
+      resetPhoneMessage();
+      updateVideoMode();
+    }
+
+    function clearMultiVideoSources() {
+      state.multiVideos.forEach(video => {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      });
+      state.multiVideos = [];
+      state.activeMediaUrls = [];
+      el.multiFeedGrid.innerHTML = "";
+      el.multiFeedGrid.hidden = true;
+      el.feedFrame.classList.remove("multi");
+    }
+
     function setVideoSource(url, reset = true) {
       const nextUrl = new URL(url, window.location.href).toString();
       if (state.activeMediaUrl === nextUrl) {
         updateVideoMode();
         return;
       }
+      clearMultiVideoSources();
       state.activeMediaUrl = nextUrl;
       el.localVideo.pause();
       el.localVideo.src = nextUrl;
@@ -1876,6 +2022,7 @@
 
     function clearVideoSource() {
       state.activeMediaUrl = "";
+      clearMultiVideoSources();
       el.localVideo.pause();
       el.localVideo.removeAttribute("src");
       el.localVideo.load();
@@ -1885,17 +2032,22 @@
 
     async function toggleVideoPlayback() {
       if (!state.liveFeedVisible) setLiveFeedVisible(true);
-      if (!state.activeMediaUrl) return;
-      if (!el.localVideo.paused && !el.localVideo.ended) {
-        el.localVideo.pause();
+      const videos = allPreviewVideos().filter(video => video && video.src);
+      if (videos.length === 0) return;
+      if (videos.some(video => !video.paused && !video.ended)) {
+        videos.forEach(video => video.pause());
         return;
       }
       await startAnalysisIfNeeded();
-      if (el.localVideo.ended) {
+      if (videos.every(video => video.ended)) {
         resetPhoneMessage("Replaying. Message will regenerate after the video ends.");
-        el.localVideo.currentTime = 0;
+        videos.forEach(video => {
+          try {
+            video.currentTime = 0;
+          } catch {}
+        });
       }
-      await el.localVideo.play();
+      await Promise.all(videos.map(video => video.play()));
       updateVideoMode();
     }
 
@@ -1933,11 +2085,14 @@
     }
 
     function updateVideoMode() {
-      const hasSource = Boolean(state.activeMediaUrl);
-      const paused = el.localVideo.paused || el.localVideo.ended;
+      const videos = allPreviewVideos().filter(video => video && video.src);
+      const hasSource = videos.length > 0;
+      const playing = videos.some(video => !video.paused && !video.ended);
+      const ended = hasSource && videos.every(video => video.ended);
+      const paused = !playing;
       el.playOverlayButton.classList.toggle("hidden", !state.liveFeedVisible || !hasSource || !paused);
       el.playOverlayButton.disabled = !hasSource || state.launchingAnalysis;
-      el.playOverlayLabel.textContent = state.launchingAnalysis ? "STARTING" : el.localVideo.ended ? "REPLAY" : "PAUSED";
+      el.playOverlayLabel.textContent = state.launchingAnalysis ? "STARTING" : ended ? "REPLAY" : "PAUSED";
       if (!state.liveFeedVisible) {
         el.videoMode.textContent = "hidden";
       } else if (!hasSource) {
@@ -1945,7 +2100,7 @@
       } else if (state.launchingAnalysis) {
         el.videoMode.textContent = "starting";
       } else {
-        el.videoMode.textContent = paused ? "paused" : "playing";
+        el.videoMode.textContent = ended ? "ended" : paused ? "paused" : "playing";
       }
     }
 
@@ -2064,6 +2219,17 @@
       container.innerHTML = "";
       if (entries.length === 0) {
         const scenario = state.scenario || selectedSource();
+        if (scenario && scenario.expected === "bedroom_risk_detected") {
+          const safe = document.createElement("article");
+          safe.className = "event-card safe-card";
+          const title = document.createElement("strong");
+          title.textContent = "Multi-room scan: no alert yet";
+          const detail = document.createElement("span");
+          detail.textContent = "Four local feeds are being analyzed; only a confirmed fall leaves as JSON.";
+          safe.append(title, detail);
+          container.appendChild(safe);
+          return;
+        }
         if (scenario && (scenario.expected === "safe_sit" || scenario.expected === "safe_activity")) {
           const safe = document.createElement("article");
           safe.className = "event-card safe-card";
@@ -2087,7 +2253,8 @@
       const title = document.createElement("strong");
       title.textContent = `${formatEventTime(event)} - ${friendlyEvent(event.event)} - ${titleCase(event.zone_label || "unknown zone")}`;
       const detail = document.createElement("span");
-      detail.textContent = `confidence ${fmtNumber(event.confidence, 2)} | track ${event.track_id}`;
+      const feed = Number.isFinite(Number(event.stream_index)) ? ` | feed ${Number(event.stream_index) + 1}` : "";
+      detail.textContent = `confidence ${fmtNumber(event.confidence, 2)} | track ${event.track_id}${feed}`;
       card.append(title, detail);
       if (event.description) {
         const description = document.createElement("span");
@@ -2129,7 +2296,9 @@
       const zone = event.zone_label || "unknown zone";
       const device = event.device_id || "unknown device";
       const confidence = fmtNumber(event.confidence, 2);
-      let text = `HomeAngel AI fall alert\nZone: ${zone}\nDevice: ${device}\nTrack: ${event.track_id}\nConfidence: ${confidence}`;
+      let text = `HomeAngel AI fall alert\nZone: ${zone}\nDevice: ${device}`;
+      if (Number.isFinite(Number(event.stream_index))) text += `\nFeed: ${Number(event.stream_index) + 1}`;
+      text += `\nTrack: ${event.track_id}\nConfidence: ${confidence}`;
       if (event.description) text += `\nScene: ${event.description}`;
       return text;
     }
@@ -2165,6 +2334,10 @@
 
     function handleVideoEnded() {
       updateVideoMode();
+      const videos = allPreviewVideos().filter(video => video && video.src);
+      if (videos.length > 1 && !videos.every(video => video.ended)) {
+        return;
+      }
       generatePhoneMessageAfterVideoEnd();
     }
 

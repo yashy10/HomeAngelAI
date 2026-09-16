@@ -140,6 +140,7 @@ struct AppConfig {
   std::string zone_label = "bedroom";
   std::string model_path;
   std::vector<std::string> rtsp_urls;
+  std::vector<std::string> stream_zones;
   /// Encoded RTSP path used for every stream in this application.
   simaai::neat::nodes::groups::RtspCodec codec = simaai::neat::nodes::groups::RtspCodec::H264;
   int latency_ms = 100;
@@ -357,6 +358,28 @@ int state_rank(FallState state) {
     return 3;
   }
   return 0;
+}
+
+FallState fall_state_from_label(const std::string& label) {
+  const std::string state = lower_copy(label);
+  if (state == "fall_confirmed" || state == "fall detected" || state == "fall_detected") {
+    return FallState::FallConfirmed;
+  }
+  if (state == "down") {
+    return FallState::Down;
+  }
+  if (state == "falling") {
+    return FallState::Falling;
+  }
+  return FallState::Upright;
+}
+
+std::string stream_zone_label(const AppConfig& cfg, int stream_index) {
+  if (stream_index >= 0 && static_cast<std::size_t>(stream_index) < cfg.stream_zones.size() &&
+      !cfg.stream_zones[static_cast<std::size_t>(stream_index)].empty()) {
+    return cfg.stream_zones[static_cast<std::size_t>(stream_index)];
+  }
+  return cfg.zone_label;
 }
 
 struct PoseFeatures {
@@ -1056,12 +1079,14 @@ class AlertSink {
 public:
   explicit AlertSink(AppConfig cfg) : cfg_(std::move(cfg)) {}
 
-  void emit_fall(double timestamp_s, int track_id, double confidence,
+  void emit_fall(int stream_index, double timestamp_s, int track_id, double confidence,
                  const std::optional<std::string>& description = std::nullopt) {
+    const std::string event_zone = stream_zone_label(cfg_, stream_index);
     nlohmann::json event = {
         {"event", "fall_detected"},
         {"device_id", cfg_.device_id},
-        {"zone_label", cfg_.zone_label},
+        {"zone_label", event_zone},
+        {"stream_index", stream_index},
         {"timestamp_s", std::round(timestamp_s * 1000.0) / 1000.0},
         {"track_id", track_id},
         {"confidence", std::round(std::clamp(confidence, 0.0, 1.0) * 1000.0) / 1000.0},
@@ -1096,11 +1121,12 @@ private:
     }
   }
 
-  std::vector<std::string> telegram_chat_ids() const {
+  std::vector<std::string> telegram_chat_ids(const std::string& event_zone) const {
     std::vector<std::string> chat_ids;
     for (const auto& route : cfg_.telegram_routes) {
-      if (route.selector == "*" || route.selector == cfg_.zone_label ||
-          route.selector == cfg_.device_id) {
+      const std::string selector = lower_copy(route.selector);
+      if (selector == "*" || selector == lower_copy(cfg_.zone_label) ||
+          selector == lower_copy(event_zone) || selector == lower_copy(cfg_.device_id)) {
         const std::string chat_id = resolve_env_reference(route.chat_id);
         if (chat_id.empty()) {
           if (const auto env_name = env_reference_name(route.chat_id)) {
@@ -1121,7 +1147,8 @@ private:
       std::cerr << "[warn] Telegram enabled but " << cfg_.telegram_token_env << " is not set\n";
       return;
     }
-    const auto chat_ids = telegram_chat_ids();
+    const std::string event_zone = event.value("zone_label", cfg_.zone_label);
+    const auto chat_ids = telegram_chat_ids(event_zone);
     if (chat_ids.empty()) {
       return;
     }
@@ -1129,8 +1156,9 @@ private:
     std::ostringstream confidence;
     confidence << std::fixed << std::setprecision(2)
                << event.at("confidence").get<double>();
-    std::string text = "HomeAngel AI fall alert\nZone: " + cfg_.zone_label +
+    std::string text = "HomeAngel AI fall alert\nZone: " + event_zone +
                        "\nDevice: " + cfg_.device_id +
+                       "\nFeed: " + std::to_string(event.value("stream_index", 0) + 1) +
                        "\nTrack: " + std::to_string(event.at("track_id").get<int>()) +
                        "\nConfidence: " + confidence.str();
     if (event.contains("description")) {
@@ -1176,6 +1204,7 @@ double rounded(double value, double scale = 1000.0) {
 
 struct TelemetryHistorySample {
   double timestamp_s = 0.0;
+  int stream_index = 0;
   int track_id = 0;
   FallState state = FallState::Upright;
   double vertical_velocity = 0.0;
@@ -1207,12 +1236,13 @@ public:
                   (frame_wall_times_ms_.back() - frame_wall_times_ms_.front())
             : 0.0;
 
-    FallState global_state = FallState::Upright;
+    FallState stream_state = FallState::Upright;
     for (const auto& tracked : tracked_poses) {
-      if (state_rank(tracked.state) > state_rank(global_state)) {
-        global_state = tracked.state;
+      if (state_rank(tracked.state) > state_rank(stream_state)) {
+        stream_state = tracked.state;
       }
       history_.push_back(TelemetryHistorySample{timestamp_s,
+                                                stream.index,
                                                 tracked.track_id,
                                                 tracked.state,
                                                 tracked.vertical_velocity,
@@ -1227,7 +1257,9 @@ public:
     nlohmann::json people = nlohmann::json::array();
     for (const auto& tracked : tracked_poses) {
       const auto& pose = tracked.pose;
-      people.push_back({{"track_id", tracked.track_id},
+      people.push_back({{"stream_index", stream.index},
+                        {"zone_label", stream_zone_label(cfg, stream.index)},
+                        {"track_id", tracked.track_id},
                         {"state", telemetry_state_label(tracked.state)},
                         {"display_state", state_label(tracked.state)},
                         {"vertical_velocity", rounded(tracked.vertical_velocity)},
@@ -1242,7 +1274,12 @@ public:
 
     nlohmann::json history = nlohmann::json::array();
     for (const auto& item : history_) {
+      if (item.stream_index != stream.index) {
+        continue;
+      }
       history.push_back({{"timestamp_s", rounded(item.timestamp_s)},
+                         {"stream_index", item.stream_index},
+                         {"zone_label", stream_zone_label(cfg, item.stream_index)},
                          {"track_id", item.track_id},
                          {"state", telemetry_state_label(item.state)},
                          {"vertical_velocity", rounded(item.vertical_velocity)},
@@ -1251,16 +1288,42 @@ public:
                          {"confidence", rounded(std::clamp(item.confidence, 0.0, 1.0))}});
     }
 
+    nlohmann::json current_stream = {
+        {"stream_index", stream.index},
+        {"zone_label", stream_zone_label(cfg, stream.index)},
+        {"updated_at_s", rounded(timestamp_s)},
+        {"frame", {{"processed", stream.processed}, {"width", stream.frame_w}, {"height", stream.frame_h}}},
+        {"state", telemetry_state_label(stream_state)},
+        {"people", people},
+        {"history", history},
+        {"performance",
+         {{"latency_ms", rounded(latency_ms, 100.0)},
+          {"metadata_send_ms", rounded(metadata_send_ms, 100.0)}}}};
+    stream_snapshots_[stream.index] = current_stream;
+
+    nlohmann::json streams = nlohmann::json::array();
+    nlohmann::json primary_stream = current_stream;
+    FallState global_state = stream_state;
+    for (const auto& [index, snapshot] : stream_snapshots_) {
+      const FallState snapshot_state = fall_state_from_label(snapshot.value("state", "UPRIGHT"));
+      if (state_rank(snapshot_state) > state_rank(global_state)) {
+        global_state = snapshot_state;
+        primary_stream = snapshot;
+      }
+      streams.push_back(snapshot);
+    }
+
     nlohmann::json doc = {
         {"schema", "homeangel.telemetry.v1"},
         {"updated_at_s", rounded(timestamp_s)},
         {"device_id", cfg.device_id},
-        {"zone_label", cfg.zone_label},
-        {"stream_index", stream.index},
-        {"frame", {{"processed", stream.processed}, {"width", stream.frame_w}, {"height", stream.frame_h}}},
+        {"zone_label", primary_stream.value("zone_label", cfg.zone_label)},
+        {"stream_index", primary_stream.value("stream_index", stream.index)},
+        {"frame", primary_stream.value("frame", nlohmann::json::object())},
         {"state", telemetry_state_label(global_state)},
-        {"people", std::move(people)},
-        {"history", std::move(history)},
+        {"people", primary_stream.value("people", nlohmann::json::array())},
+        {"history", primary_stream.value("history", nlohmann::json::array())},
+        {"streams", std::move(streams)},
         {"thresholds",
          {{"fall_velocity_threshold", rounded(cfg.fall_velocity_threshold)},
           {"angular_velocity_threshold_deg_s", rounded(cfg.angular_velocity_threshold_deg_s)},
@@ -1327,6 +1390,7 @@ private:
   fs::path path_;
   int history_limit_ = 150;
   bool warned_ = false;
+  std::map<int, nlohmann::json> stream_snapshots_;
   std::deque<TelemetryHistorySample> history_;
   std::deque<double> frame_wall_times_ms_;
 };
@@ -1392,15 +1456,16 @@ std::string unquote(std::string value) {
   return value;
 }
 
-std::vector<std::string> parse_streams(const fs::path& config_path) {
+std::vector<std::string> parse_yaml_string_list(const fs::path& config_path,
+                                                const std::string& list_key) {
   std::ifstream input(config_path);
   if (!input.is_open()) {
     throw std::runtime_error("failed to open config file: " + config_path.string());
   }
 
-  std::vector<std::string> streams;
-  bool in_streams = false;
-  int streams_indent = -1;
+  std::vector<std::string> values;
+  bool in_list = false;
+  int list_indent = -1;
   std::string raw_line;
   while (std::getline(input, raw_line)) {
     const std::string line_without_comment = strip_inline_comment(raw_line);
@@ -1416,22 +1481,27 @@ std::vector<std::string> parse_streams(const fs::path& config_path) {
     }
     const std::string line = sima_examples::trim_copy(line_without_comment);
 
-    if (in_streams && indent <= streams_indent && line.rfind("- ", 0) != 0) {
-      in_streams = false;
+    if (in_list && indent <= list_indent && line.rfind("- ", 0) != 0) {
+      in_list = false;
     }
-    if (!in_streams && line == "streams:") {
-      in_streams = true;
-      streams_indent = indent;
+    if (!in_list && line == list_key + ":") {
+      in_list = true;
+      list_indent = indent;
       continue;
     }
-    if (in_streams && line.rfind("- ", 0) == 0) {
+    if (in_list && line.rfind("- ", 0) == 0) {
       const std::string value = unquote(line.substr(2));
       if (value.empty()) {
-        throw std::runtime_error("streams entries must be non-empty strings");
+        throw std::runtime_error(list_key + " entries must be non-empty strings");
       }
-      streams.push_back(value);
+      values.push_back(value);
     }
   }
+  return values;
+}
+
+std::vector<std::string> parse_streams(const fs::path& config_path) {
+  std::vector<std::string> streams = parse_yaml_string_list(config_path, "streams");
   if (streams.empty()) {
     throw std::runtime_error("streams must be a non-empty list");
   }
@@ -1565,6 +1635,9 @@ void validate_config(const AppConfig& cfg) {
   sima_examples::require(!cfg.model_path.empty(), "model.path must be set");
   sima_examples::require(!cfg.rtsp_urls.empty(), "streams must be set");
   sima_examples::require(cfg.rtsp_urls.size() <= 4, "this phase supports up to four streams");
+  sima_examples::require(cfg.stream_zones.empty() ||
+                             cfg.stream_zones.size() == cfg.rtsp_urls.size(),
+                         "stream_zones must be empty or match streams length");
   sima_examples::require(!cfg.insight_host.empty(), "output.insight.host must be set");
   sima_examples::require(!cfg.events_log.empty(), "output.events_log must be set");
   sima_examples::require(!cfg.telemetry_json.empty(), "output.telemetry_json must be set");
@@ -1654,6 +1727,7 @@ AppConfig load_app_config(const fs::path& config_path) {
   cfg.zone_label = raw.string_or("zone_label", "bedroom");
   cfg.model_path = raw.string_or("model.path", "");
   cfg.rtsp_urls = parse_streams(config_path);
+  cfg.stream_zones = parse_yaml_string_list(config_path, "stream_zones");
   cfg.codec = parse_input_codec(raw.string_or("input.codec", "h264"));
   cfg.tcp = raw.bool_or("input.tcp", true);
   cfg.latency_ms = raw.int_or("input.latency_ms", 100);
@@ -1707,10 +1781,10 @@ AppConfig load_app_config(const fs::path& config_path) {
   cfg.vlm_models =
       split_csv(raw.string_or("vlm.models", "Gemma-4-E4B-it,Qwen3-VL-4B-Instruct-GPTQ-a16w4"));
   cfg.vlm_model_paths = raw.string_or("vlm.model_paths", "");
-  cfg.vlm_max_tokens = raw.int_or("vlm.max_tokens", 96);
-  cfg.vlm_timeout_seconds = raw.double_or("vlm.timeout_seconds", 20.0);
+  cfg.vlm_max_tokens = raw.int_or("vlm.max_tokens", 220);
+  cfg.vlm_timeout_seconds = raw.double_or("vlm.timeout_seconds", 25.0);
   cfg.vlm_jpeg_quality = raw.int_or("vlm.jpeg_quality", 78);
-  cfg.vlm_crop_padding = raw.double_or("vlm.crop_padding", 0.20);
+  cfg.vlm_crop_padding = raw.double_or("vlm.crop_padding", 0.60);
   cfg.vlm_system_prompt =
       raw.string_or("vlm.system_prompt", cfg.vlm_system_prompt);
   cfg.vlm_user_prompt = raw.string_or("vlm.user_prompt", cfg.vlm_user_prompt);
@@ -2181,7 +2255,8 @@ void process_output_sample(StreamRuntime& stream, AppRuntime& app, const AppConf
         if (app.vlm_router) {
           description = app.vlm_router->describe_confirmed_fall(sample, tracked_pose);
         }
-        app.alert_sink->emit_fall(timestamp_s, track_id, tracked_pose.confidence, description);
+        app.alert_sink->emit_fall(stream.index, timestamp_s, track_id, tracked_pose.confidence,
+                                  description);
       }
       tracked_poses.push_back(std::move(tracked_pose));
     }

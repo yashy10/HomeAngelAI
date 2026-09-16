@@ -21,6 +21,7 @@ __pycache__/
 /labs/homeangel-ai/build/
 /labs/homeangel-ai/libcompat/
 /labs/homeangel-ai/models/
+/labs/homeangel-ai/.runtime/
 /labs/homeangel-ai/.env
 /labs/homeangel-ai/.env.local
 /labs/homeangel-ai/.env.*

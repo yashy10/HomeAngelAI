@@ -270,7 +270,7 @@ start_vlm_if_enabled() {
     return
   fi
 
-  log_path="${APP_ROOT}/vlm_server.log"
+  log_path="${APP_ROOT}/vlm_server.devkit.log"
   remote="${DEVKIT_USER}@${DEVKIT_HOST}"
   remote_check="source ~/pyneat/bin/activate && exec ${APP_ROOT}/run_vlm_server.sh --config ${CONFIG} --check-config"
   log "Checking VLM model availability on the DevKit"
@@ -291,15 +291,15 @@ start_vlm_if_enabled() {
     return
   fi
 
-  log "Starting VLM server in background; log: ${log_path}"
-  remote_cmd="source ~/pyneat/bin/activate && exec ${APP_ROOT}/run_vlm_server.sh --config ${CONFIG}"
-  nohup ssh -o BatchMode=yes -o ConnectTimeout=8 "${remote}" \
+  log "Starting VLM server on DevKit in background; log: ${log_path}"
+  remote_cmd="source ~/pyneat/bin/activate && nohup ${APP_ROOT}/run_vlm_server.sh --config ${CONFIG} >${log_path} 2>&1 < /dev/null & echo \$!"
+  ssh -o BatchMode=yes -o ConnectTimeout=8 "${remote}" \
     "bash --noprofile --norc -lc $(printf '%q' "$remote_cmd")" \
-    >"${log_path}" 2>&1 &
-  echo "$!" > "${APP_ROOT}/vlm_server.pid"
-  sleep 2
-  if ! kill -0 "$(cat "${APP_ROOT}/vlm_server.pid")" >/dev/null 2>&1; then
-    warn "VLM server exited early; inspect ${log_path}"
+    > "${APP_ROOT}/vlm_server.pid"
+  sleep 4
+  if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "${remote}" \
+    "pgrep -af '[v]lm_server.py.*--config ${CONFIG}' >/dev/null 2>&1"; then
+    warn "VLM server exited early; inspect ${log_path} on the DevKit"
   fi
 }
 

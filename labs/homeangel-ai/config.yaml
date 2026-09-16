@@ -6,6 +6,8 @@ model:
 
 streams:
   - rtsp://127.0.0.1:8554/src1
+stream_zones:
+  - bedroom
 
 input:
   codec: h264

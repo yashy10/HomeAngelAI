@@ -149,7 +149,7 @@ Equivalent helper:
 
 ## Optional Gemma VLM Descriptions
 
-The VLM stage is disabled by default. When enabled, it runs only after
+The VLM stage is enabled for the single-stream fall demo. It runs only after
 `FALL_CONFIRMED`, sends one in-memory crop to a loopback GenAI server, and appends
 the returned text as `description` in the same JSON event. Raw frames are never
 written to disk and are never sent to Telegram or webhook endpoints.
@@ -222,7 +222,11 @@ The demo console is a local diagnostic view for judges. It reads two local strea
 - Stream A: `telemetry.json`, including state, velocity/angle history, FPS, latency, and compute placement.
 - Stream B: `events.log`, the JSON event stream that also feeds webhook or Telegram alerts.
 
-The console live-feed pane shows only the selected video through a same-origin local media proxy. It starts paused, fits inside the pane, and displays a large center play control. The pose/state, risk, graphs, events, and phone mock are rendered outside that video surface from local telemetry and JSON events. Use the direct Insight viewer only when you need low-level overlay debugging.
+The console live-feed pane shows only the selected video or local video grid through
+a same-origin local media proxy. It starts paused, fits inside the pane, and displays
+a large center play control. The pose/state, risk, graphs, events, and phone mock are
+rendered outside that video surface from local telemetry and JSON events. Use the
+direct Insight viewer only when you need low-level overlay debugging.
 
 Serve it locally:
 
@@ -256,10 +260,15 @@ Keep this server local to the demo network. It is not part of the production fam
 The console opens with a source-selection page. Pick one of three cached local presets or upload a local video file:
 
 - `Fall Alert`: `demo.mp4`, expected to emit a `fall_detected` JSON event and move the risk bar to `Risky`.
-- `Sit-Down Check`: `adl_sitdown.mp4`, expected to show safe sit-down behavior without an alert.
+- `Multi-Room Scan`: four local feeds. Feed 1 is the Bedroom fall clip; feeds 2-4 are safe activity clips. The detector should identify the Bedroom feed as risky and emit one event naming that zone/feed.
 - `Routine Activity`: `routine_adl.mp4`, pulled from the local GMDCSA cache and expected to stay safe.
 
-`Analyze Selected` uploads/assigns the clip to Insight source `1`, moves to the analysis page, and loads the video paused. Press the large center control in the video pane to start the local Insight stream and launch the HomeAngel app on the DevKit with `dk`. The live-feed toggle can hide the local video preview while the detection pipeline continues.
+`Analyze Selected` uploads/assigns the clip to Insight source `1`, or assigns the
+multi-room preset to Insight sources `1` through `4`, moves to the analysis page,
+and loads the local preview paused. Press the large center control in the video pane
+to start the local Insight stream and launch the HomeAngel app on the DevKit with
+`dk`. The live-feed toggle can hide the local video preview while the detection
+pipeline continues.
 
 Uploaded clips are sent to Insight under a temporary `homeangel_upload_*` name and are cleaned up on session reset or the next upload. Presets are cached local demo assets.
 
@@ -274,7 +283,28 @@ curl -H "Content-Type: application/json" \
   http://127.0.0.1:8765/api/session/run
 ```
 
-Other preset IDs are `sit-down` and `routine-adl`. Uploaded videos use the browser file picker; the server gives them a temporary local `homeangel_upload_*` name and removes them on reset.
+Other preset IDs are `multi-room` and `routine-adl`. Uploaded videos use the browser
+file picker; the server gives them a temporary local `homeangel_upload_*` name and
+removes them on reset.
+
+For the multi-room demo from a terminal, the console buttons perform:
+
+```bash
+curl -H "Content-Type: application/json" \
+  -d '{"preset":"multi-room"}' \
+  http://127.0.0.1:8765/api/session/prepare
+curl -H "Content-Type: application/json" \
+  -d '{}' \
+  http://127.0.0.1:8765/api/session/run
+```
+
+The generated runtime config is `/workspace/labs/homeangel-ai/.runtime/session_config.yaml`.
+It uses four RTSP inputs and `stream_zones` so the emitted event can name the risky
+room. This mode intentionally disables the VLM frame-join and app video retransmit
+branches because the current Neat graph has single-stream frame join semantics for
+VLM confirmation. The four-feed mode still runs YOLO26 pose triage on the MLA and
+emits JSON/Telegram metadata identifying the risky feed. Use the `Fall Alert` preset
+when you want the Gemma VLM scene-description path.
 
 If you want to bypass the console server and use Insight directly:
 

@@ -33,6 +33,8 @@ APP_CONFIG = Path(os.environ.get("HOMEANGEL_APP_CONFIG", str(APP_ROOT / "config.
 APP_BINARY = Path(os.environ.get("HOMEANGEL_APP_BINARY", str(APP_ROOT / "build/homeangel-ai")))
 ENV_FILE = Path(os.environ.get("HOMEANGEL_ENV_FILE", str(APP_ROOT / ".env.local")))
 APP_LOG = APP_ROOT / "console_app.log"
+RUNTIME_DIR = APP_ROOT / ".runtime"
+SESSION_CONFIG = RUNTIME_DIR / "session_config.yaml"
 OUTPUT_FILES = [
     APP_ROOT / "events.log",
     APP_ROOT / "telemetry.json",
@@ -50,13 +52,42 @@ PRESETS = [
         "summary": "Triggers the emergency alert path.",
     },
     {
-        "id": "sit-down",
-        "title": "Sit-Down Check",
-        "file": "adl_sitdown.mp4",
-        "path": Path("/workspace/assets/videos/fall/adl_sitdown.mp4"),
-        "function": "sit_no_fall",
-        "expected": "safe_sit",
-        "summary": "Shows routine sitting without a fall alert.",
+        "id": "multi-room",
+        "title": "Multi-Room Scan",
+        "file": "4 local feeds",
+        "function": "multi_stream_triage",
+        "expected": "bedroom_risk_detected",
+        "summary": "Runs four local feeds and identifies which room becomes risky.",
+        "streams": [
+            {
+                "title": "Bedroom",
+                "zone_label": "Bedroom",
+                "file": "demo.mp4",
+                "path": Path("/workspace/assets/videos/fall/demo.mp4"),
+                "expected": "fall_detected",
+            },
+            {
+                "title": "Hallway",
+                "zone_label": "Hallway",
+                "file": "adl_sitdown.mp4",
+                "path": Path("/workspace/assets/videos/fall/adl_sitdown.mp4"),
+                "expected": "safe_activity",
+            },
+            {
+                "title": "Kitchen",
+                "zone_label": "Kitchen",
+                "file": "adl_sitdown.mp4",
+                "path": Path("/workspace/assets/videos/fall/adl_sitdown.mp4"),
+                "expected": "safe_activity",
+            },
+            {
+                "title": "Living Room",
+                "zone_label": "Living Room",
+                "file": "adl_sitdown.mp4",
+                "path": Path("/workspace/assets/videos/fall/adl_sitdown.mp4"),
+                "expected": "safe_activity",
+            },
+        ],
     },
     {
         "id": "routine-adl",
@@ -69,7 +100,13 @@ PRESETS = [
     },
 ]
 PRESETS_BY_ID = {preset["id"]: preset for preset in PRESETS}
-LOCAL_PRESETS = {preset["file"]: preset["path"] for preset in PRESETS}
+LOCAL_PRESETS = {}
+for preset in PRESETS:
+    if preset.get("path"):
+        LOCAL_PRESETS[preset["file"]] = preset["path"]
+    for stream in preset.get("streams", []):
+        if stream.get("path"):
+            LOCAL_PRESETS[stream["file"]] = stream["path"]
 TEMP_UPLOAD_PREFIX = "homeangel_upload_"
 
 SSL_CONTEXT = ssl._create_unverified_context()
@@ -389,6 +426,25 @@ def clear_outputs():
 
 
 def public_preset(preset):
+    streams = []
+    for index, stream in enumerate(preset.get("streams", [])):
+        stream_path = stream.get("path")
+        streams.append(
+            {
+                "stream_index": index,
+                "title": stream.get("title") or stream.get("zone_label") or f"Feed {index + 1}",
+                "zone_label": stream.get("zone_label") or stream.get("title") or f"Feed {index + 1}",
+                "file": stream.get("file", ""),
+                "function": stream.get("function", preset["function"]),
+                "expected": stream.get("expected", preset["expected"]),
+                "available": bool(stream_path and stream_path.exists()),
+            }
+        )
+    if streams:
+        available = all(stream["available"] for stream in streams)
+    else:
+        preset_path = preset.get("path")
+        available = bool(preset_path and preset_path.exists())
     return {
         "id": preset["id"],
         "title": preset["title"],
@@ -396,7 +452,9 @@ def public_preset(preset):
         "function": preset["function"],
         "expected": preset["expected"],
         "summary": preset["summary"],
-        "available": preset["path"].exists(),
+        "available": available,
+        "multi": bool(streams),
+        "streams": streams,
     }
 
 
@@ -589,11 +647,21 @@ def cleanup_temp_uploads():
             delete_media(path)
 
 
-def stop_insight_source():
+def source_indices(count=1):
+    return [INSIGHT_SOURCE_INDEX + offset for offset in range(max(1, int(count or 1)))]
+
+
+def stop_insight_source(index=None):
+    source_index = INSIGHT_SOURCE_INDEX if index is None else int(index)
     try:
-        insight_request("POST", "/api/mediasrc/stop", {"index": INSIGHT_SOURCE_INDEX}, timeout=10)
+        insight_request("POST", "/api/mediasrc/stop", {"index": source_index}, timeout=10)
     except RuntimeError:
         pass
+
+
+def stop_insight_sources(count=4):
+    for index in source_indices(count):
+        stop_insight_source(index)
 
 
 def ensure_media(filename, local_path=None):
@@ -609,50 +677,106 @@ def ensure_media(filename, local_path=None):
     raise RuntimeError(f"{safe_name} is not loaded in Insight")
 
 
-def assign_insight_source(filename, local_path=None):
+def assign_insight_source(filename, local_path=None, index=None):
+    source_index = INSIGHT_SOURCE_INDEX if index is None else int(index)
     safe_name = ensure_media(filename, local_path)
-    stop_insight_source()
+    stop_insight_source(source_index)
     insight_request(
         "POST",
         "/api/mediasrc/assign",
-        {"index": INSIGHT_SOURCE_INDEX, "file": safe_name, "transport": "rtsp"},
+        {"index": source_index, "file": safe_name, "transport": "rtsp"},
         timeout=15,
     )
     return safe_name
 
 
-def start_insight_stream(filename, local_path=None):
-    safe_name = assign_insight_source(filename, local_path)
+def start_insight_stream(filename, local_path=None, index=None):
+    source_index = INSIGHT_SOURCE_INDEX if index is None else int(index)
+    safe_name = assign_insight_source(filename, local_path, source_index)
     try:
-        insight_request("POST", "/api/mediasrc/start", {"index": INSIGHT_SOURCE_INDEX}, timeout=15)
+        insight_request("POST", "/api/mediasrc/start", {"index": source_index}, timeout=15)
     except RuntimeError as exc:
         if "Already running" not in str(exc):
             raise
     return safe_name
 
 
-def source_status():
+def source_status(index=None):
+    source_index = INSIGHT_SOURCE_INDEX if index is None else int(index)
     sources = insight_request("GET", "/api/mediasrc", timeout=10)
     if isinstance(sources, list):
         for source in sources:
-            if source.get("index") == INSIGHT_SOURCE_INDEX:
+            if not isinstance(source, dict):
+                continue
+            if source.get("index") == source_index:
                 return source
-    return {"index": INSIGHT_SOURCE_INDEX, "file": "", "state": "unknown"}
+    return {"index": source_index, "file": "", "state": "unknown"}
+
+
+def source_statuses(count=4):
+    return [source_status(index) for index in source_indices(count)]
 
 
 def viewer_url():
-    result = insight_request("GET", "/api/viewer-url?mode=light&src=0", timeout=10)
+    result = insight_request("GET", "/api/viewer-url?mode=light&src=0&max_channels=4", timeout=10)
     if isinstance(result, dict):
         return result.get("url", "")
     return ""
+
+
+def rtsp_url_for_source(source_index):
+    try:
+        raw = load_config_doc()
+        configured = raw.get("streams") or []
+        if configured:
+            first = str(configured[0])
+            match = re.match(r"^(.*?/src)\d+([^/]*)$", first)
+            if match:
+                return f"{match.group(1)}{int(source_index)}{match.group(2)}"
+        host = (((raw.get("output") or {}).get("insight") or {}).get("host") or DEVKIT_HOST)
+    except Exception:
+        host = DEVKIT_HOST
+    return f"rtsp://{host}:8554/src{int(source_index)}"
+
+
+def write_session_config(scenario):
+    if yaml is None:
+        raise RuntimeError("PyYAML is required to create multi-stream session configs")
+    raw = load_config_doc()
+    streams = scenario.get("streams") or []
+    if not streams:
+        return str(APP_CONFIG)
+
+    raw["zone_label"] = "multi-room"
+    raw["streams"] = [rtsp_url_for_source(stream["insight_source_index"]) for stream in streams]
+    raw["stream_zones"] = [str(stream.get("zone_label") or stream.get("title") or f"Feed {i + 1}")
+                           for i, stream in enumerate(streams)]
+    raw.setdefault("vlm", {})["enabled"] = False
+    output = raw.setdefault("output", {})
+    output["video_enabled"] = False
+    insight = output.setdefault("insight", {})
+    insight["viewer_url"] = insight.get(
+        "viewer_url",
+        "https://192.168.1.10:8081/static/viewer.html?mode=light&src=0&max_channels=4",
+    )
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    SESSION_CONFIG.write_text(yaml.safe_dump(raw, sort_keys=False, width=100000), encoding="utf-8")
+    return str(SESSION_CONFIG)
+
+
+def active_config_path():
+    scenario = current_scenario()
+    config_path = scenario.get("config_path") if scenario else ""
+    return Path(config_path) if config_path else APP_CONFIG
 
 
 def start_app():
     global APP_PROCESS
     if not APP_BINARY.exists():
         raise RuntimeError(f"app binary not found: {APP_BINARY}")
-    if not APP_CONFIG.exists():
-        raise RuntimeError(f"app config not found: {APP_CONFIG}")
+    config_path = active_config_path()
+    if not config_path.exists():
+        raise RuntimeError(f"app config not found: {config_path}")
     if not devkit_ssh_open(timeout=1.0, force=True):
         raise RuntimeError(f"DevKit SSH is not reachable at {DEVKIT_HOST}:22")
 
@@ -663,7 +787,7 @@ def start_app():
         clear_outputs()
         APP_LOG.parent.mkdir(parents=True, exist_ok=True)
         log_file = APP_LOG.open("ab", buffering=0)
-        command_parts = ["dk", str(APP_BINARY), "--config", str(APP_CONFIG)]
+        command_parts = ["dk", str(APP_BINARY), "--config", str(config_path)]
         command = " ".join(shlex.quote(part) for part in command_parts)
         APP_PROCESS = subprocess.Popen(
             ["bash", "-lic", command],
@@ -700,6 +824,7 @@ def stop_app():
 
 def start_analysis_session(filename, scenario, local_path=None):
     stop_app()
+    stop_insight_sources(4)
     clear_outputs()
     safe_name = start_insight_stream(filename, local_path)
     scenario_payload = dict(scenario)
@@ -729,8 +854,63 @@ def start_analysis_session(filename, scenario, local_path=None):
     return result
 
 
+def materialize_multi_streams(preset):
+    streams = []
+    for index, stream in enumerate(preset.get("streams", [])):
+        source_index = INSIGHT_SOURCE_INDEX + index
+        safe_name = ensure_media(stream["file"], stream.get("path"))
+        streams.append(
+            {
+                "stream_index": index,
+                "insight_source_index": source_index,
+                "title": stream.get("title") or stream.get("zone_label") or f"Feed {index + 1}",
+                "zone_label": stream.get("zone_label") or stream.get("title") or f"Feed {index + 1}",
+                "file": safe_name,
+                "media_url": media_url(safe_name),
+                "function": stream.get("function", preset["function"]),
+                "expected": stream.get("expected", preset["expected"]),
+            }
+        )
+    if not streams:
+        raise RuntimeError("multi-room preset has no streams")
+    return streams
+
+
+def prepare_multi_analysis_session(preset):
+    stop_app()
+    stop_insight_sources(len(preset.get("streams", [])) or 4)
+    clear_outputs()
+    set_analysis_error("")
+    streams = materialize_multi_streams(preset)
+    for stream in streams:
+        assign_insight_source(stream["file"], None, stream["insight_source_index"])
+    scenario_payload = public_preset(preset)
+    scenario_payload["file"] = f"{len(streams)} local feeds"
+    scenario_payload["streams"] = streams
+    scenario_payload["config_path"] = write_session_config(scenario_payload)
+    set_current_scenario(scenario_payload)
+    return {
+        "prepared": True,
+        "stream_started": False,
+        "analysis_started": False,
+        "file": scenario_payload["file"],
+        "media_urls": [stream["media_url"] for stream in streams],
+        "scenario": current_scenario(),
+        "source": source_status(streams[0]["insight_source_index"]),
+        "sources": source_statuses(len(streams)),
+        "viewer_url": viewer_url(),
+        "message": f"{scenario_payload.get('title', 'Multi-room scan')} is ready",
+    }
+
+
+def start_multi_analysis_session(preset):
+    prepare_multi_analysis_session(preset)
+    return run_prepared_session()
+
+
 def prepare_analysis_session(filename, scenario, local_path=None):
     stop_app()
+    stop_insight_sources(4)
     clear_outputs()
     set_analysis_error("")
     safe_name = assign_insight_source(filename, local_path)
@@ -756,21 +936,33 @@ def run_prepared_session():
     if not filename:
         raise RuntimeError("no prepared video session")
     clear_outputs()
-    stop_insight_source()
+    scenario_streams = scenario.get("streams") or []
+    source_count = len(scenario_streams) if scenario_streams else 1
+    stop_insight_sources(source_count)
     time.sleep(0.2)
-    try:
-        insight_request("POST", "/api/mediasrc/start", {"index": INSIGHT_SOURCE_INDEX}, timeout=15)
-    except RuntimeError as exc:
-        if "Already running" not in str(exc):
-            raise
+    if scenario_streams:
+        for stream in scenario_streams:
+            try:
+                insight_request("POST", "/api/mediasrc/start", {"index": stream["insight_source_index"]}, timeout=15)
+            except RuntimeError as exc:
+                if "Already running" not in str(exc):
+                    raise
+    else:
+        try:
+            insight_request("POST", "/api/mediasrc/start", {"index": INSIGHT_SOURCE_INDEX}, timeout=15)
+        except RuntimeError as exc:
+            if "Already running" not in str(exc):
+                raise
     result = {
         "prepared": True,
         "stream_started": True,
         "analysis_started": False,
         "file": filename,
-        "media_url": media_url(filename),
+        "media_url": media_url(filename) if not scenario_streams else "",
+        "media_urls": [stream.get("media_url", "") for stream in scenario_streams],
         "scenario": scenario,
-        "source": source_status(),
+        "source": source_status(scenario_streams[0]["insight_source_index"]) if scenario_streams else source_status(),
+        "sources": source_statuses(source_count),
         "viewer_url": viewer_url(),
     }
     try:
@@ -790,7 +982,7 @@ def run_prepared_session():
 
 def reset_session():
     stop_app()
-    stop_insight_source()
+    stop_insight_sources(4)
     cleanup_temp_uploads()
     clear_outputs()
     set_current_scenario({})
@@ -924,20 +1116,28 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
     def handle_status(self):
         insight = {"ok": False}
         source = {"index": INSIGHT_SOURCE_INDEX, "file": "", "state": "unknown"}
+        sources = []
         view = ""
         try:
             health = insight_request("GET", "/api/health", timeout=5)
             insight = {"ok": True, "health": health}
-            source = source_status()
+            scenario = current_scenario() or {}
+            source_count = len(scenario.get("streams") or []) or 1
+            sources = source_statuses(source_count)
+            source = sources[0] if sources else source_status()
             view = viewer_url()
         except Exception as exc:
             insight = {"ok": False, "error": str(exc)}
+        scenario = current_scenario() or {}
+        scenario_streams = scenario.get("streams") if scenario else []
         self.send_json(
             {
                 "insight": insight,
                 "source": source,
+                "sources": sources,
                 "viewer_url": view,
-                "media_url": media_url(source.get("file")) if source.get("file") else "",
+                "media_url": "" if scenario_streams else media_url(source.get("file")) if source.get("file") else "",
+                "media_urls": [stream.get("media_url", "") for stream in scenario_streams],
                 "devkit_host": DEVKIT_HOST,
                 "devkit_ssh_open": devkit_ssh_open(timeout=0.2, max_age=10.0),
                 "presets": [public_preset(preset) for preset in PRESETS],
@@ -985,6 +1185,7 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
         data = item.file.read()
         if not filename or not data:
             raise RuntimeError("empty upload")
+        stop_insight_sources(4)
         upload_media_bytes(filename, data)
         filename = start_insight_stream(filename)
         clear_outputs()
@@ -1003,6 +1204,9 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
         preset = PRESETS_BY_ID.get(preset_id)
         if not preset:
             raise RuntimeError(f"unknown preset: {preset_id}")
+        if preset.get("streams"):
+            self.send_json(start_multi_analysis_session(preset))
+            return
         if not preset["path"].exists():
             raise RuntimeError(f"preset video missing: {preset['path']}")
         self.send_json(start_analysis_session(preset["file"], public_preset(preset), preset["path"]))
@@ -1013,6 +1217,9 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
         preset = PRESETS_BY_ID.get(preset_id)
         if not preset:
             raise RuntimeError(f"unknown preset: {preset_id}")
+        if preset.get("streams"):
+            self.send_json(prepare_multi_analysis_session(preset))
+            return
         if not preset["path"].exists():
             raise RuntimeError(f"preset video missing: {preset['path']}")
         self.send_json(prepare_analysis_session(preset["file"], public_preset(preset), preset["path"]))
@@ -1038,7 +1245,7 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
             raise RuntimeError("empty upload")
 
         stop_app()
-        stop_insight_source()
+        stop_insight_sources(4)
         cleanup_temp_uploads()
         temp_name = f"{TEMP_UPLOAD_PREFIX}{uuid.uuid4().hex[:10]}_{original}"
         upload_media_bytes(temp_name, data)
@@ -1076,7 +1283,7 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
             raise RuntimeError("empty upload")
 
         stop_app()
-        stop_insight_source()
+        stop_insight_sources(4)
         cleanup_temp_uploads()
         temp_name = f"{TEMP_UPLOAD_PREFIX}{uuid.uuid4().hex[:10]}_{original}"
         upload_media_bytes(temp_name, data)
