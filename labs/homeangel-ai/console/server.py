@@ -28,6 +28,7 @@ APP_ROOT = Path("/workspace/labs/homeangel-ai")
 INSIGHT_BASE = os.environ.get("HOMEANGEL_INSIGHT_URL", "https://127.0.0.1:9900").rstrip("/")
 INSIGHT_SOURCE_INDEX = int(os.environ.get("HOMEANGEL_INSIGHT_SOURCE", "1"))
 DEVKIT_HOST = os.environ.get("HOMEANGEL_DEVKIT_HOST", "192.168.1.20")
+DEVKIT_USER = os.environ.get("HOMEANGEL_DEVKIT_USER", "sima")
 APP_CONFIG = Path(os.environ.get("HOMEANGEL_APP_CONFIG", str(APP_ROOT / "config.devkit.yaml")))
 APP_BINARY = Path(os.environ.get("HOMEANGEL_APP_BINARY", str(APP_ROOT / "build/homeangel-ai")))
 ENV_FILE = Path(os.environ.get("HOMEANGEL_ENV_FILE", str(APP_ROOT / ".env.local")))
@@ -82,6 +83,13 @@ ERROR_LOCK = threading.Lock()
 LAST_ANALYSIS_ERROR = ""
 DEVKIT_STATUS_LOCK = threading.Lock()
 DEVKIT_STATUS_CACHE = {"checked_at": 0.0, "open": False}
+VLM_STATUS_LOCK = threading.Lock()
+VLM_STATUS_CACHE = {
+    "checked_at": 0.0,
+    "server_ok": False,
+    "served_models": [],
+    "error": "",
+}
 
 
 def read_text_tail(path, limit=1600):
@@ -235,6 +243,62 @@ def public_telegram_status(settings=None):
     return settings
 
 
+def parse_served_models(text):
+    try:
+        payload = json.loads(text or "{}")
+    except Exception:
+        return []
+    return [
+        str(item.get("id") or item.get("name"))
+        for item in payload.get("data", [])
+        if isinstance(item, dict) and (item.get("id") or item.get("name"))
+    ]
+
+
+def cached_devkit_vlm_status(host, port, max_age=5.0):
+    now = time.monotonic()
+    with VLM_STATUS_LOCK:
+        if now - VLM_STATUS_CACHE["checked_at"] < max_age:
+            return dict(VLM_STATUS_CACHE)
+
+    result = {
+        "checked_at": now,
+        "server_ok": False,
+        "served_models": [],
+        "error": "",
+    }
+    target = f"{DEVKIT_USER}@{DEVKIT_HOST}"
+    url = f"http://{host}:{port}/v1/models"
+    command = [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=3",
+        target,
+        f"curl -fsS -m 2 {shlex.quote(url)}",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=4,
+        )
+        if completed.returncode == 0:
+            result["server_ok"] = True
+            result["served_models"] = parse_served_models(completed.stdout)
+        else:
+            result["error"] = (completed.stderr or completed.stdout or "VLM server unavailable").strip()
+    except Exception as exc:
+        result["error"] = str(exc)
+
+    with VLM_STATUS_LOCK:
+        VLM_STATUS_CACHE.update(result)
+        return dict(VLM_STATUS_CACHE)
+
+
 def vlm_settings():
     try:
         raw = load_config_doc()
@@ -262,21 +326,10 @@ def vlm_settings():
         if not loopback:
             error = "vlm.host must be loopback"
         else:
-            try:
-                with urllib.request.urlopen(f"http://{host}:{port}/v1/models", timeout=0.8) as response:
-                    data = response.read().decode("utf-8", errors="replace")
-                    server_ok = 200 <= response.status < 300
-                    try:
-                        payload = json.loads(data or "{}")
-                        served_models = [
-                            str(item.get("id") or item.get("name"))
-                            for item in payload.get("data", [])
-                            if isinstance(item, dict) and (item.get("id") or item.get("name"))
-                        ]
-                    except Exception:
-                        served_models = []
-            except Exception as exc:
-                error = str(exc)
+            status = cached_devkit_vlm_status(host, port)
+            server_ok = bool(status.get("server_ok"))
+            served_models = list(status.get("served_models") or [])
+            error = str(status.get("error") or "")
     return {
         "enabled": enabled,
         "active": enabled and server_ok,

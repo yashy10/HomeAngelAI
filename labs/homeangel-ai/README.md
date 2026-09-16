@@ -158,33 +158,33 @@ The model route is configured in `config.yaml` and `config.devkit.yaml`:
 
 ```yaml
 vlm:
-  enabled: false
+  enabled: true
   host: 127.0.0.1
   port: 9998
   models: Gemma-4-E4B-it,Qwen3-VL-4B-Instruct-GPTQ-a16w4
-  model_paths: Gemma-4-E4B-it=/media/nvme/llima/models/Gemma-4-E4B-it,Qwen3-VL-4B-Instruct-GPTQ-a16w4=/media/nvme/llima/models/Qwen3-VL-4B-Instruct-GPTQ-a16w4
+  model_paths: Gemma-4-E4B-it=/media/nvme/llima/models/gemma-4-E4B-it-GPTQ-a16w4,Qwen3-VL-4B-Instruct-GPTQ-a16w4=/media/nvme/llima/models/Qwen3-VL-4B-Instruct-GPTQ-a16w4
 ```
 
 Deploy or copy the Gemma 4 E4B LLiMa model directory onto the DevKit, then update
-`vlm.model_paths` if the local directory or served name differs. Check what the
-launcher can see:
+`vlm.model_paths` if the local directory or served name differs. HomeAngel's
+launcher starts the VLM server on the DevKit over SSH and activates `~/pyneat`,
+matching the SiMa Detection-to-VLM Assistant example. Check what the server can see:
 
 ```bash
-dk /bin/bash /workspace/labs/homeangel-ai/run_vlm_server.sh \
-  --config /workspace/labs/homeangel-ai/config.devkit.yaml \
-  --check-config
+ssh sima@192.168.1.20 \
+  'source ~/pyneat/bin/activate && /workspace/labs/homeangel-ai/run_vlm_server.sh --config /workspace/labs/homeangel-ai/config.devkit.yaml --check-config'
 ```
 
-Start the local GenAI server in a separate terminal on the DevKit:
+Start the full demo console and VLM server together:
 
 ```bash
-dk /bin/bash /workspace/labs/homeangel-ai/run_vlm_server.sh \
-  --config /workspace/labs/homeangel-ai/config.devkit.yaml
+/workspace/labs/homeangel-ai/AngelStart --no-build
 ```
 
-Then set `vlm.enabled: true` in `/workspace/labs/homeangel-ai/config.devkit.yaml`
-and run HomeAngel normally. If Gemma is not installed but the Qwen fallback path is
-installed, the launcher serves Qwen and the app falls back to that model name.
+If Gemma is not installed but the Qwen fallback path is installed, the launcher
+serves Qwen and the app falls back to that model name. VLM descriptions are added
+only after `FALL_CONFIRMED`, and only the resulting text joins the JSON/Telegram
+event.
 
 Finite smoke test:
 

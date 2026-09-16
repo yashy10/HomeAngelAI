@@ -92,6 +92,11 @@ def start_server(host: str, port: int, served: list[tuple[str, Path]]):
     return genai_server
 
 
+def selected_models_for_memory(available: list[tuple[str, Path]]) -> list[tuple[str, Path]]:
+    # Modalix memory is tight for VLMs; serve the first available route entry.
+    return available[:1]
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -107,12 +112,18 @@ def main() -> int:
         print(f"VLM config error: {exc}", file=sys.stderr)
         return 2
 
-    served = discover_served_models(cfg)
+    available = discover_served_models(cfg)
+    served = selected_models_for_memory(available)
     route = " -> ".join(str(model) for model in cfg["models"])
     print(f"VLM route: {route}", flush=True)
     if args.check_config:
         print(f"configured endpoint: http://{cfg['host']}:{cfg['port']}", flush=True)
-        print(f"installed local model directories found: {len(served)}", flush=True)
+        print(f"installed local model directories found: {len(available)}", flush=True)
+        print(
+            "selected model to serve: "
+            + (served[0][0] if served else "none"),
+            flush=True,
+        )
         return 0
 
     if not served:

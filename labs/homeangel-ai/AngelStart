@@ -7,6 +7,7 @@ BIND="${HOMEANGEL_CONSOLE_BIND:-127.0.0.1}"
 PORT="${HOMEANGEL_CONSOLE_PORT:-8765}"
 INSIGHT_URL="${HOMEANGEL_INSIGHT_URL:-https://127.0.0.1:9900}"
 DEVKIT_HOST="${HOMEANGEL_DEVKIT_HOST:-192.168.1.20}"
+DEVKIT_USER="${HOMEANGEL_DEVKIT_USER:-sima}"
 ENV_FILE="${HOMEANGEL_ENV_FILE:-${APP_ROOT}/.env.local}"
 BUILD=1
 START_VLM=1
@@ -258,7 +259,7 @@ report_telegram() {
 }
 
 start_vlm_if_enabled() {
-  local enabled log_path check_output
+  local enabled log_path check_output remote remote_cmd remote_check
   enabled="$(yaml_value vlm.enabled false)"
   if [[ "$enabled" != "true" ]]; then
     log "VLM disabled"
@@ -270,9 +271,12 @@ start_vlm_if_enabled() {
   fi
 
   log_path="${APP_ROOT}/vlm_server.log"
+  remote="${DEVKIT_USER}@${DEVKIT_HOST}"
+  remote_check="source ~/pyneat/bin/activate && exec ${APP_ROOT}/run_vlm_server.sh --config ${CONFIG} --check-config"
   log "Checking VLM model availability on the DevKit"
   set +e
-  check_output="$(bash -lic "dk /bin/bash ${APP_ROOT}/run_vlm_server.sh --config ${CONFIG} --check-config" 2>&1)"
+  check_output="$(ssh -o BatchMode=yes -o ConnectTimeout=8 "${remote}" \
+    "bash --noprofile --norc -lc $(printf '%q' "$remote_check")" 2>&1)"
   local rc=$?
   set -e
   printf '%s\n' "$check_output" | sed 's/^/[AngelStart][vlm] /'
@@ -281,13 +285,16 @@ start_vlm_if_enabled() {
     return
   fi
 
-  if pgrep -af "${APP_ROOT}/run_vlm_server.sh.*--config ${CONFIG}" >/dev/null 2>&1; then
+  if ssh -o BatchMode=yes -o ConnectTimeout=5 "${remote}" \
+    "pgrep -af '[v]lm_server.py.*--config ${CONFIG}' >/dev/null 2>&1"; then
     log "VLM server already appears to be running"
     return
   fi
 
   log "Starting VLM server in background; log: ${log_path}"
-  nohup bash -lic "dk /bin/bash ${APP_ROOT}/run_vlm_server.sh --config ${CONFIG}" \
+  remote_cmd="source ~/pyneat/bin/activate && exec ${APP_ROOT}/run_vlm_server.sh --config ${CONFIG}"
+  nohup ssh -o BatchMode=yes -o ConnectTimeout=8 "${remote}" \
+    "bash --noprofile --norc -lc $(printf '%q' "$remote_cmd")" \
     >"${log_path}" 2>&1 &
   echo "$!" > "${APP_ROOT}/vlm_server.pid"
   sleep 2
@@ -313,11 +320,11 @@ check_devkit
 build_if_needed
 validate_config
 report_telegram
-start_vlm_if_enabled
 
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
   log "Check-only complete"
   exit 0
 fi
 
+start_vlm_if_enabled
 start_console
