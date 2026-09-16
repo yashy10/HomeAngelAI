@@ -1,0 +1,25 @@
+.DS_Store
+*.log
+*.pid
+*.py[cod]
+__pycache__/
+
+# Local SDK/runtime state
+/.ghcr.io-sima-neat-sdk-v*/
+/.insight-media/
+/.venv/
+/arm64_sdk/
+/assets/
+/gmdcsa24/
+/hello_kit/
+/sdk-extensions/
+
+# HomeAngel generated/runtime artifacts
+/labs/home-angel
+/labs/homeangel-ai/build/
+/labs/homeangel-ai/libcompat/
+/labs/homeangel-ai/models/
+/labs/homeangel-ai/events.log
+/labs/homeangel-ai/telemetry.json
+/labs/homeangel-ai/telemetry.json.tmp
+/labs/homeangel-ai/**/__pycache__/

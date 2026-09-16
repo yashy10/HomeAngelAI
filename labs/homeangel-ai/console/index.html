@@ -1,0 +1,2287 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HomeAngel Console</title>
+  <style>
+    :root {
+      --bg: #101214;
+      --panel: #171a1d;
+      --panel-2: #20252a;
+      --panel-3: #282e34;
+      --line: #343b42;
+      --text: #f4f7f8;
+      --soft: #d9e0e5;
+      --muted: #9fa9b2;
+      --green: #25b86f;
+      --amber: #e5a72f;
+      --red: #e34f4f;
+      --cyan: #58c7e8;
+      --blue: #6e91ff;
+      --shadow: 0 22px 50px rgba(0, 0, 0, .34);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 8px 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      border-color: rgba(88, 199, 232, .72);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+
+    .primary-button {
+      border-color: rgba(37, 184, 111, .55);
+      background: rgba(37, 184, 111, .17);
+      color: #c9f6dd;
+    }
+
+    .danger-button {
+      border-color: rgba(227, 79, 79, .55);
+      background: rgba(227, 79, 79, .13);
+      color: #ffd1d1;
+    }
+
+    .quiet-button {
+      background: transparent;
+      color: var(--muted);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .page {
+      height: 100vh;
+      width: 100vw;
+      display: none;
+      overflow: hidden;
+    }
+
+    .page.active {
+      display: grid;
+    }
+
+    .select-page {
+      grid-template-rows: 62px minmax(0, 1fr) 30px;
+    }
+
+    .analysis-page {
+      grid-template-rows: 58px minmax(0, 1fr) 30px;
+    }
+
+    .topbar {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #141719;
+      overflow: hidden;
+    }
+
+    .brand {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      color: #071012;
+      font-weight: 800;
+    }
+
+    .brand h1 {
+      min-width: 0;
+      font-size: 1.02rem;
+      line-height: 1.2;
+      font-weight: 780;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .subtitle {
+      min-width: 0;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .top-actions,
+    .status-pills,
+    .row-actions {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .pill {
+      max-width: 178px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel-2);
+      color: var(--soft);
+      padding: 6px 9px;
+      font-size: .74rem;
+      line-height: 1.1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pill.good {
+      border-color: rgba(37, 184, 111, .55);
+      background: rgba(37, 184, 111, .12);
+      color: #b8f1d3;
+    }
+
+    .pill.warn {
+      border-color: rgba(229, 167, 47, .55);
+      background: rgba(229, 167, 47, .12);
+      color: #ffd98c;
+    }
+
+    .pill.bad {
+      border-color: rgba(227, 79, 79, .55);
+      background: rgba(227, 79, 79, .12);
+      color: #ffb4b4;
+    }
+
+    .select-main {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 310px;
+      gap: 12px;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    .source-grid {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-auto-rows: minmax(160px, 1fr);
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .source-card,
+    .panel,
+    .video-panel,
+    .metric-strip,
+    .risk-panel,
+    .finding-panel,
+    .timeline-panel,
+    .phone-panel,
+    .graph-panel,
+    .modal {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .source-card {
+      min-width: 0;
+      min-height: 0;
+      padding: 14px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .source-card.selected {
+      border-color: rgba(88, 199, 232, .86);
+      box-shadow: inset 0 0 0 1px rgba(88, 199, 232, .36);
+    }
+
+    .source-card.unavailable {
+      opacity: .55;
+    }
+
+    .source-head {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .source-title {
+      min-width: 0;
+      font-size: 1.06rem;
+      font-weight: 800;
+      line-height: 1.15;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .source-function {
+      color: var(--cyan);
+      font-size: .73rem;
+      text-transform: uppercase;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .source-summary {
+      min-width: 0;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.35;
+      overflow: hidden;
+    }
+
+    .source-foot {
+      min-width: 0;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+
+    .source-foot span {
+      min-width: 0;
+      color: var(--muted);
+      font-size: .76rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .upload-card {
+      border-style: dashed;
+    }
+
+    .upload-input {
+      width: 100%;
+      min-width: 0;
+      color: var(--muted);
+      font-size: .78rem;
+    }
+
+    .select-side {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .panel {
+      min-width: 0;
+      min-height: 0;
+      padding: 13px;
+      display: grid;
+      align-content: start;
+      gap: 12px;
+    }
+
+    .panel h2,
+    .panel h3 {
+      min-width: 0;
+      font-size: .96rem;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .summary-list {
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .summary-row {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      gap: 8px;
+      align-items: baseline;
+    }
+
+    .summary-row span:first-child {
+      color: var(--muted);
+      font-size: .74rem;
+    }
+
+    .summary-row span:last-child {
+      min-width: 0;
+      color: var(--soft);
+      font-size: .82rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .message-line {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .analysis-main {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.24fr) minmax(330px, .76fr);
+      gap: 12px;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    .analysis-left,
+    .analysis-right {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .analysis-left {
+      grid-template-rows: minmax(0, 1fr) minmax(130px, .34fr) 50px;
+    }
+
+    .analysis-right {
+      grid-template-rows: 94px 124px minmax(0, 1fr) 176px;
+    }
+
+    .video-panel,
+    .timeline-panel,
+    .graph-panel {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 34px minmax(0, 1fr);
+    }
+
+    .panel-title {
+      min-width: 0;
+      min-height: 34px;
+      padding: 7px 10px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--soft);
+      font-size: .78rem;
+    }
+
+    .panel-title span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .feed-frame {
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+      background: #050607;
+      overflow: hidden;
+    }
+
+    .feed-frame video {
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      display: block;
+      background: #050607;
+      object-fit: contain;
+    }
+
+    .feed-hidden {
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
+      background:
+        linear-gradient(135deg, rgba(88, 199, 232, .08), transparent 42%),
+        #080a0b;
+    }
+
+    .feed-hidden strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--soft);
+      font-size: .96rem;
+    }
+
+    .play-overlay {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(164px, 42%);
+      aspect-ratio: 1;
+      transform: translate(-50%, -50%);
+      border: 1px solid rgba(255, 255, 255, .28);
+      border-radius: 50%;
+      background: rgba(5, 6, 7, .78);
+      color: var(--soft);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      box-shadow: 0 16px 42px rgba(0, 0, 0, .38);
+    }
+
+    .play-overlay::before {
+      content: "";
+      width: 0;
+      height: 0;
+      margin-left: 7%;
+      border-top: 28px solid transparent;
+      border-bottom: 28px solid transparent;
+      border-left: 42px solid currentColor;
+    }
+
+    .play-overlay span {
+      position: absolute;
+      left: 50%;
+      bottom: 18%;
+      transform: translateX(-50%);
+      max-width: 80%;
+      color: rgba(244, 247, 248, .78);
+      font-size: clamp(.58rem, 1vw, .72rem);
+      font-weight: 800;
+      letter-spacing: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .play-overlay:hover {
+      border-color: rgba(88, 199, 232, .7);
+      background: rgba(7, 12, 14, .9);
+    }
+
+    .play-overlay.hidden {
+      display: none;
+    }
+
+    .graph-grid {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .graph-panel.flash {
+      border-color: rgba(227, 79, 79, .85);
+      box-shadow: 0 0 0 3px rgba(227, 79, 79, .18);
+    }
+
+    .graph-body {
+      min-width: 0;
+      min-height: 0;
+      padding: 8px 10px 9px;
+      overflow: hidden;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .metric-strip {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 8px 10px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .metric strong,
+    .metric span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .metric strong {
+      font-size: 1rem;
+      line-height: 1.1;
+    }
+
+    .metric span {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: .7rem;
+    }
+
+    .risk-panel,
+    .finding-panel,
+    .phone-panel {
+      min-width: 0;
+      min-height: 0;
+      padding: 12px;
+      display: grid;
+      gap: 9px;
+      overflow: hidden;
+    }
+
+    .phone-panel {
+      padding: 10px;
+    }
+
+    .risk-row,
+    .finding-head {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .risk-label,
+    .finding-title {
+      min-width: 0;
+      font-size: 1.18rem;
+      line-height: 1.1;
+      font-weight: 850;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .risk-score {
+      color: var(--muted);
+      font-size: .78rem;
+      white-space: nowrap;
+    }
+
+    .risk-track {
+      height: 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #0a0c0d;
+      overflow: hidden;
+    }
+
+    .risk-fill {
+      width: 8%;
+      height: 100%;
+      border-radius: 999px;
+      background: var(--green);
+      transition: width .28s ease, background-color .28s ease;
+    }
+
+    .risk-copy,
+    .finding-copy {
+      min-width: 0;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.25;
+      overflow: hidden;
+    }
+
+    .finding-title.safe,
+    .risk-label.safe {
+      color: #9bedbf;
+    }
+
+    .finding-title.watch,
+    .risk-label.watch {
+      color: #ffd37c;
+    }
+
+    .finding-title.risky,
+    .risk-label.risky {
+      color: #ff8a8a;
+    }
+
+    .finding-copy {
+      max-height: 38px;
+    }
+
+    .state-line {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .state-value {
+      min-width: 0;
+      font-size: .9rem;
+      font-weight: 780;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .state-dot {
+      width: 13px;
+      height: 13px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 0 6px rgba(37, 184, 111, .12);
+    }
+
+    .state-falling .state-dot,
+    .state-down .state-dot {
+      background: var(--amber);
+      box-shadow: 0 0 0 6px rgba(229, 167, 47, .14);
+    }
+
+    .state-confirmed .state-dot {
+      background: var(--red);
+      box-shadow: 0 0 0 6px rgba(227, 79, 79, .15);
+    }
+
+    .event-list,
+    .modal-list {
+      min-width: 0;
+      min-height: 0;
+      padding: 9px;
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .event-card {
+      min-width: 0;
+      border: 1px solid rgba(227, 79, 79, .45);
+      border-radius: 8px;
+      background: rgba(227, 79, 79, .1);
+      padding: 9px;
+      display: grid;
+      gap: 4px;
+      overflow: hidden;
+    }
+
+    .event-card.safe-card {
+      border-color: rgba(37, 184, 111, .4);
+      background: rgba(37, 184, 111, .1);
+    }
+
+    .event-card strong,
+    .event-card span,
+    .empty {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .event-card strong {
+      color: #ffd4d4;
+      font-size: .84rem;
+      line-height: 1.18;
+      white-space: nowrap;
+    }
+
+    .event-card.safe-card strong {
+      color: #c9f6dd;
+    }
+
+    .event-card span,
+    .empty {
+      color: var(--muted);
+      font-size: .75rem;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .empty {
+      padding: 10px;
+    }
+
+    .see-more-button {
+      min-height: 27px;
+      padding: 5px 9px;
+      font-size: .73rem;
+    }
+
+    .phone {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      border: 1px solid #cfd9dd;
+      border-radius: 8px;
+      background: #eef3f4;
+      color: #101214;
+      display: grid;
+      grid-template-rows: 24px minmax(0, 1fr) auto auto;
+      overflow: hidden;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, .22);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+
+    .phone.alert {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 32px rgba(227, 79, 79, .28);
+    }
+
+    .phone-top {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 9px;
+      background: #dfe8ea;
+      color: #4b545b;
+      font-size: .66rem;
+    }
+
+    .phone-status {
+      min-width: 0;
+      max-width: 52%;
+      color: #5b686f;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .phone-status.ready {
+      color: #1d7a4e;
+      font-weight: 760;
+    }
+
+    .phone-status.missing {
+      color: #a45c00;
+      font-weight: 760;
+    }
+
+    .phone-message {
+      min-height: 0;
+      padding: 9px 9px 6px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 5px;
+      overflow: hidden;
+    }
+
+    .phone-source {
+      color: #53606a;
+      font-size: .68rem;
+      font-weight: 760;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .phone-text {
+      border: 1px solid #cfd9dd;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 7px 8px;
+      color: #172024;
+      font-size: .74rem;
+      line-height: 1.25;
+      overflow: hidden;
+    }
+
+    .phone-compose {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 68px;
+      gap: 7px;
+      padding: 0 9px 7px;
+    }
+
+    .phone-input {
+      width: 100%;
+      min-width: 0;
+      height: 44px;
+      border: 1px solid #c4cfd4;
+      border-radius: 8px;
+      background: #fff;
+      color: #11191c;
+      padding: 7px 8px;
+      resize: none;
+      outline: none;
+      font-size: .73rem;
+      line-height: 1.2;
+      overflow: hidden;
+    }
+
+    .phone-input:focus {
+      border-color: #4db7d6;
+      box-shadow: 0 0 0 2px rgba(77, 183, 214, .18);
+    }
+
+    .phone-send {
+      min-width: 0;
+      min-height: 44px;
+      border-color: #25a865;
+      background: #25b86f;
+      color: #06110b;
+      padding: 0 10px;
+      font-weight: 820;
+    }
+
+    .phone-feedback {
+      min-width: 0;
+      min-height: 16px;
+      padding: 0 10px 7px;
+      color: #5f6a70;
+      font-size: .68rem;
+      line-height: 1.1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .phone-feedback.error {
+      color: #a13d3d;
+      font-weight: 700;
+    }
+
+    .footer {
+      min-width: 0;
+      padding: 7px 12px;
+      border-top: 1px solid var(--line);
+      background: #141719;
+      color: var(--muted);
+      font-size: .72rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: rgba(8, 9, 10, .92);
+    }
+
+    .modal {
+      width: min(760px, calc(100vw - 32px));
+      max-height: calc(100vh - 40px);
+      display: grid;
+      grid-template-rows: 45px minmax(0, 1fr);
+      box-shadow: var(--shadow);
+    }
+
+    .modal-header {
+      min-width: 0;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .modal-header h3 {
+      min-width: 0;
+      font-size: .98rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .modal-list {
+      overflow: auto;
+    }
+
+    .modal-list .event-card strong,
+    .modal-list .event-card span {
+      white-space: normal;
+    }
+
+    .token {
+      position: fixed;
+      z-index: 50;
+      top: 50%;
+      left: calc(50% - 80px);
+      border: 1px solid #ffd36d;
+      border-radius: 8px;
+      background: #fff6d6;
+      color: #18130a;
+      padding: 8px 10px;
+      font-weight: 800;
+      font-size: .78rem;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, .34);
+      pointer-events: none;
+      animation: crossBoundary 1.2s cubic-bezier(.19, 1, .22, 1) forwards;
+    }
+
+    @keyframes crossBoundary {
+      0% {
+        transform: translate(-90px, 34px) scale(.96);
+        opacity: 0;
+      }
+      20% {
+        opacity: 1;
+      }
+      60% {
+        transform: translate(20px, 0) scale(1);
+      }
+      100% {
+        transform: translate(155px, -30px) scale(.98);
+        opacity: 0;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      .select-main,
+      .analysis-main {
+        grid-template-columns: 1fr;
+      }
+
+      .select-main {
+        grid-template-rows: minmax(0, 1fr) 190px;
+      }
+
+      .analysis-main {
+        grid-template-rows: minmax(0, 1fr) minmax(360px, .72fr);
+      }
+
+      .analysis-right {
+        grid-template-rows: 84px 102px minmax(0, 1fr) 158px;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .topbar {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 6px;
+      }
+
+      .top-actions,
+      .status-pills {
+        justify-content: flex-start;
+      }
+
+      .source-grid {
+        grid-template-columns: 1fr;
+        grid-auto-rows: minmax(118px, 1fr);
+      }
+
+      .select-main,
+      .analysis-main {
+        padding: 9px;
+        gap: 8px;
+      }
+
+      .graph-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .analysis-left {
+        grid-template-rows: minmax(0, 1fr) minmax(120px, .4fr) 90px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="page select-page active" id="pageSelect">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">HA</div>
+        <div>
+          <h1>HomeAngel</h1>
+          <p class="subtitle">Choose a local scenario to analyze on the edge unit</p>
+        </div>
+      </div>
+      <div class="status-pills">
+        <div class="pill warn" id="selectInsightStatus">Insight checking</div>
+        <div class="pill warn" id="selectDevkitStatus">DevKit checking</div>
+      </div>
+    </header>
+
+    <main class="select-main">
+      <section class="source-grid" id="sourceGrid">
+        <button class="source-card selected" type="button" data-preset="fall-alert">
+          <div class="source-head">
+            <div>
+              <div class="source-title">Fall Alert</div>
+              <div class="source-function">fall detection</div>
+            </div>
+            <span class="pill warn">preset</span>
+          </div>
+          <p class="source-summary">Triggers the emergency alert path.</p>
+          <div class="source-foot">
+            <span>demo.mp4</span>
+            <span>risky output</span>
+          </div>
+        </button>
+      </section>
+
+      <aside class="select-side">
+        <section class="panel">
+          <h2 id="selectedTitle">Fall Alert</h2>
+          <div class="summary-list">
+            <div class="summary-row"><span>Function</span><span id="selectedFunction">fall detection</span></div>
+            <div class="summary-row"><span>Expected</span><span id="selectedExpected">fall detected</span></div>
+            <div class="summary-row"><span>Source</span><span id="selectedFile">demo.mp4</span></div>
+            <div class="summary-row"><span>Storage</span><span id="selectedStorage">cached local preset</span></div>
+          </div>
+          <p class="message-line" id="selectMessage">Ready.</p>
+        </section>
+
+        <div class="row-actions">
+          <button class="quiet-button" id="resetButton" type="button">Reset</button>
+          <button class="primary-button" id="analyzeButton" type="button">Analyze Selected</button>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="footer">Video stays local. Uploaded clips are temporary Insight media for the current session; events remain JSON metadata.</footer>
+  </section>
+
+  <section class="page analysis-page" id="pageAnalysis">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">HA</div>
+        <div>
+          <h1 id="analysisTitle">HomeAngel Analysis</h1>
+          <p class="subtitle" id="analysisSubtitle">Waiting for local telemetry</p>
+        </div>
+      </div>
+      <div class="status-pills">
+        <div class="pill warn" id="analysisInsightStatus">Insight checking</div>
+        <div class="pill warn" id="analysisAppStatus">app idle</div>
+        <div class="pill" id="telemetryStatus">telemetry waiting</div>
+        <div class="pill warn" id="vlmStatus">VLM checking</div>
+        <button class="quiet-button" id="liveToggleButton" type="button" aria-pressed="true">Hide Live Feed</button>
+        <button class="quiet-button" id="backButton" type="button">Change Video</button>
+      </div>
+    </header>
+
+    <main class="analysis-main">
+      <section class="analysis-left">
+        <section class="video-panel">
+          <div class="panel-title">
+            <span>Local Live Feed</span>
+            <span id="videoMode">paused</span>
+          </div>
+          <div class="feed-frame">
+            <video id="localVideo" title="Local video preview" preload="metadata" playsinline></video>
+            <button class="play-overlay" id="playOverlayButton" type="button" aria-label="Play local video">
+              <span id="playOverlayLabel">PAUSED</span>
+            </button>
+            <div class="feed-hidden" id="feedHidden" hidden>
+              <div>
+                <strong>Live feed hidden</strong>
+                <p>Detection continues locally; no browser video is being displayed.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="graph-grid">
+          <section class="graph-panel" id="velocityPanel">
+            <div class="panel-title">
+              <span>Vertical velocity</span>
+              <span id="velocityReadout">threshold --</span>
+            </div>
+            <div class="graph-body"><canvas id="velocityCanvas"></canvas></div>
+          </section>
+          <section class="graph-panel" id="anglePanel">
+            <div class="panel-title">
+              <span>Torso angle</span>
+              <span id="angleReadout">threshold --</span>
+            </div>
+            <div class="graph-body"><canvas id="angleCanvas"></canvas></div>
+          </section>
+        </section>
+
+        <section class="metric-strip">
+          <div class="metric"><strong id="fpsValue">--</strong><span>FPS</span></div>
+          <div class="metric"><strong id="latencyValue">--</strong><span>latency ms</span></div>
+          <div class="metric"><strong id="computeValue">MLA</strong><span>pose compute</span></div>
+          <div class="metric"><strong id="bytesValue">0 B</strong><span>JSON bytes out</span></div>
+        </section>
+      </section>
+
+      <section class="analysis-right">
+        <section class="risk-panel">
+          <div class="risk-row">
+            <div class="risk-label safe" id="riskLabel">Safe</div>
+            <div class="risk-score" id="riskScore">8%</div>
+          </div>
+          <div class="risk-track"><div class="risk-fill" id="riskFill"></div></div>
+          <p class="risk-copy" id="riskCopy">No fall signal.</p>
+        </section>
+
+        <section class="finding-panel" id="findingPanel">
+          <div class="finding-head">
+            <div class="finding-title safe" id="findingTitle">Safe</div>
+            <span class="pill good" id="findingPill">monitoring</span>
+          </div>
+          <p class="finding-copy" id="findingCopy">Waiting for analysis.</p>
+          <div class="state-line" id="stateLine">
+            <div class="state-value" id="stateValue">UPRIGHT</div>
+            <div class="state-dot"></div>
+          </div>
+        </section>
+
+        <section class="timeline-panel">
+          <div class="panel-title">
+            <span>Detection Console</span>
+            <div class="row-actions">
+              <span id="eventCount">0 events</span>
+              <button class="see-more-button" id="seeMoreButton" type="button" hidden>See More</button>
+            </div>
+          </div>
+          <div class="event-list" id="eventsList">
+            <div class="empty">No transmitted events.</div>
+          </div>
+        </section>
+
+        <section class="phone-panel">
+          <div class="phone" id="phone">
+            <div class="phone-top">
+              <span>Family phone</span>
+              <span class="phone-status missing" id="telegramStatus">Telegram off</span>
+            </div>
+            <div class="phone-message">
+              <div class="phone-source">HomeAngel Bot</div>
+              <div class="phone-text" id="phoneMessage">No alert sent.</div>
+            </div>
+            <form class="phone-compose" id="phoneCompose">
+              <textarea class="phone-input" id="phoneInput" maxlength="900" rows="2" placeholder="Generated after video ends"></textarea>
+              <button class="phone-send" id="phoneSendButton" type="submit">Send</button>
+            </form>
+            <div class="phone-feedback" id="phoneFeedback">Token stays in environment; message is metadata only.</div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="footer" id="analysisFooter">Production mode is headless. This console is a local diagnostic view.</footer>
+  </section>
+
+  <section class="modal-backdrop" id="eventModal" hidden>
+    <div class="modal">
+      <header class="modal-header">
+        <h3>Full Detection Timeline</h3>
+        <button class="quiet-button" id="closeModalButton" type="button">Close</button>
+      </header>
+      <div class="modal-list" id="modalEventsList"></div>
+    </div>
+  </section>
+
+  <script>
+    const telemetryPath = "/api/telemetry";
+    const eventsPath = "../events.log";
+    const encoder = new TextEncoder();
+    const visibleEventLimit = 3;
+
+    const state = {
+      presets: [],
+      selectedType: "preset",
+      selectedPreset: "fall-alert",
+      uploadFile: null,
+      scenario: null,
+      liveFeedVisible: true,
+      activeMediaUrl: "",
+      streamStarted: false,
+      analysisStarted: false,
+      launchingAnalysis: false,
+      lastVelocityCrossing: false,
+      lastAngleCrossing: false,
+      knownEvents: new Set(),
+      firstEventPoll: true,
+      latestEntries: [],
+      lastTelemetry: null,
+      videoEnded: false,
+      phoneMessageReady: false,
+      telegram: null
+    };
+
+    const el = {
+      pageSelect: document.getElementById("pageSelect"),
+      pageAnalysis: document.getElementById("pageAnalysis"),
+      sourceGrid: document.getElementById("sourceGrid"),
+      selectInsightStatus: document.getElementById("selectInsightStatus"),
+      selectDevkitStatus: document.getElementById("selectDevkitStatus"),
+      selectMessage: document.getElementById("selectMessage"),
+      selectedTitle: document.getElementById("selectedTitle"),
+      selectedFunction: document.getElementById("selectedFunction"),
+      selectedExpected: document.getElementById("selectedExpected"),
+      selectedFile: document.getElementById("selectedFile"),
+      selectedStorage: document.getElementById("selectedStorage"),
+      analyzeButton: document.getElementById("analyzeButton"),
+      resetButton: document.getElementById("resetButton"),
+      analysisTitle: document.getElementById("analysisTitle"),
+      analysisSubtitle: document.getElementById("analysisSubtitle"),
+      analysisInsightStatus: document.getElementById("analysisInsightStatus"),
+      analysisAppStatus: document.getElementById("analysisAppStatus"),
+      telemetryStatus: document.getElementById("telemetryStatus"),
+      vlmStatus: document.getElementById("vlmStatus"),
+      liveToggleButton: document.getElementById("liveToggleButton"),
+      backButton: document.getElementById("backButton"),
+      localVideo: document.getElementById("localVideo"),
+      playOverlayButton: document.getElementById("playOverlayButton"),
+      playOverlayLabel: document.getElementById("playOverlayLabel"),
+      feedHidden: document.getElementById("feedHidden"),
+      videoMode: document.getElementById("videoMode"),
+      velocityPanel: document.getElementById("velocityPanel"),
+      anglePanel: document.getElementById("anglePanel"),
+      velocityCanvas: document.getElementById("velocityCanvas"),
+      angleCanvas: document.getElementById("angleCanvas"),
+      velocityReadout: document.getElementById("velocityReadout"),
+      angleReadout: document.getElementById("angleReadout"),
+      fpsValue: document.getElementById("fpsValue"),
+      latencyValue: document.getElementById("latencyValue"),
+      computeValue: document.getElementById("computeValue"),
+      bytesValue: document.getElementById("bytesValue"),
+      riskLabel: document.getElementById("riskLabel"),
+      riskScore: document.getElementById("riskScore"),
+      riskFill: document.getElementById("riskFill"),
+      riskCopy: document.getElementById("riskCopy"),
+      findingPanel: document.getElementById("findingPanel"),
+      findingTitle: document.getElementById("findingTitle"),
+      findingPill: document.getElementById("findingPill"),
+      findingCopy: document.getElementById("findingCopy"),
+      stateLine: document.getElementById("stateLine"),
+      stateValue: document.getElementById("stateValue"),
+      eventCount: document.getElementById("eventCount"),
+      eventsList: document.getElementById("eventsList"),
+      seeMoreButton: document.getElementById("seeMoreButton"),
+      eventModal: document.getElementById("eventModal"),
+      modalEventsList: document.getElementById("modalEventsList"),
+      closeModalButton: document.getElementById("closeModalButton"),
+      phone: document.getElementById("phone"),
+      phoneMessage: document.getElementById("phoneMessage"),
+      phoneCompose: document.getElementById("phoneCompose"),
+      phoneInput: document.getElementById("phoneInput"),
+      phoneSendButton: document.getElementById("phoneSendButton"),
+      phoneFeedback: document.getElementById("phoneFeedback"),
+      telegramStatus: document.getElementById("telegramStatus"),
+      analysisFooter: document.getElementById("analysisFooter")
+    };
+
+    function setPill(node, text, mode) {
+      node.textContent = text;
+      node.classList.remove("good", "warn", "bad");
+      if (mode) node.classList.add(mode);
+    }
+
+    function setPhoneFeedback(text, isError = false) {
+      el.phoneFeedback.textContent = text;
+      el.phoneFeedback.classList.toggle("error", isError);
+    }
+
+    function updatePhoneSendState() {
+      const canSend = state.videoEnded &&
+        state.phoneMessageReady &&
+        state.telegram &&
+        state.telegram.ready &&
+        el.phoneInput.value.trim().length > 0;
+      el.phoneSendButton.disabled = !canSend;
+      el.phoneInput.readOnly = !(state.videoEnded && state.phoneMessageReady);
+    }
+
+    function resetPhoneMessage(message = "Message will be generated after the video ends.") {
+      state.videoEnded = false;
+      state.phoneMessageReady = false;
+      el.phoneMessage.textContent = message;
+      el.phoneInput.value = "";
+      setPhoneFeedback("Waiting for the final JSON event stream.");
+      updatePhoneSendState();
+    }
+
+    function updateTelegramStatus(telegram) {
+      state.telegram = telegram || null;
+      el.telegramStatus.classList.remove("ready", "missing");
+      if (!telegram || telegram.error) {
+        el.telegramStatus.textContent = "not ready";
+        el.telegramStatus.classList.add("missing");
+        setPhoneFeedback(telegram && telegram.error ? telegram.error : "Telegram status unavailable.", true);
+        updatePhoneSendState();
+        return;
+      }
+      if (telegram.ready) {
+        el.telegramStatus.textContent = `${telegram.chat_count} chat${telegram.chat_count === 1 ? "" : "s"}`;
+        el.telegramStatus.classList.add("ready");
+        if (state.phoneMessageReady) {
+          setPhoneFeedback("Final text-only Telegram message is ready.");
+        }
+      } else if (!telegram.enabled) {
+        el.telegramStatus.textContent = "disabled";
+        el.telegramStatus.classList.add("missing");
+        setPhoneFeedback("Enable alerts.telegram in config.devkit.yaml to send.", true);
+      } else if (!telegram.token_present) {
+        el.telegramStatus.textContent = "missing token";
+        el.telegramStatus.classList.add("missing");
+        setPhoneFeedback(`Export ${telegram.token_env} before starting the console.`, true);
+      } else {
+        el.telegramStatus.textContent = "no route";
+        el.telegramStatus.classList.add("missing");
+        setPhoneFeedback("Add a matching Telegram chat_id route in config.devkit.yaml.", true);
+      }
+      updatePhoneSendState();
+    }
+
+    function updateVlmStatus(vlm) {
+      if (!vlm) {
+        setPill(el.vlmStatus, "VLM checking", "warn");
+      } else if (vlm.active) {
+        setPill(el.vlmStatus, "VLM active", "good");
+      } else if (vlm.enabled) {
+        setPill(el.vlmStatus, "VLM waiting", "warn");
+      } else {
+        setPill(el.vlmStatus, "VLM off", "warn");
+      }
+    }
+
+    function showPage(name) {
+      el.pageSelect.classList.toggle("active", name === "select");
+      el.pageAnalysis.classList.toggle("active", name === "analysis");
+    }
+
+    function fmtFunction(value) {
+      return String(value || "analysis").replace(/_/g, " ");
+    }
+
+    function fmtExpected(value) {
+      if (value === "fall_detected") return "fall detected";
+      if (value === "safe_sit") return "sit observed, no alert";
+      if (value === "safe_activity") return "routine activity, no alert";
+      return "configured analysis";
+    }
+
+    function selectedSource() {
+      if (state.selectedType === "upload") {
+        return {
+          id: "uploaded-video",
+          title: "Uploaded Video",
+          file: state.uploadFile ? state.uploadFile.name : "choose a file",
+          function: "custom_analysis",
+          expected: "analysis",
+          summary: "Run the local detector on a temporary upload.",
+          available: Boolean(state.uploadFile),
+          temporary: true
+        };
+      }
+      return state.presets.find(preset => preset.id === state.selectedPreset) || state.presets[0];
+    }
+
+    function renderSources() {
+      el.sourceGrid.innerHTML = "";
+      state.presets.forEach(preset => {
+        el.sourceGrid.appendChild(sourceCard(preset, "preset"));
+      });
+      el.sourceGrid.appendChild(uploadCard());
+      updateSelectedSummary();
+    }
+
+    function sourceCard(source, type) {
+      const card = document.createElement("button");
+      card.className = "source-card";
+      card.type = "button";
+      if (!source.available) card.classList.add("unavailable");
+      if (type === state.selectedType && source.id === state.selectedPreset) card.classList.add("selected");
+      card.innerHTML = `
+        <div class="source-head">
+          <div>
+            <div class="source-title"></div>
+            <div class="source-function"></div>
+          </div>
+          <span class="pill ${source.expected === "fall_detected" ? "warn" : "good"}">preset</span>
+        </div>
+        <p class="source-summary"></p>
+        <div class="source-foot">
+          <span></span>
+          <span></span>
+        </div>
+      `;
+      card.querySelector(".source-title").textContent = source.title;
+      card.querySelector(".source-function").textContent = fmtFunction(source.function);
+      card.querySelector(".source-summary").textContent = source.summary || "";
+      const foot = card.querySelectorAll(".source-foot span");
+      foot[0].textContent = source.file || "";
+      foot[1].textContent = fmtExpected(source.expected);
+      card.addEventListener("click", () => {
+        state.selectedType = "preset";
+        state.selectedPreset = source.id;
+        renderSources();
+      });
+      return card;
+    }
+
+    function uploadCard() {
+      const card = document.createElement("div");
+      card.className = `source-card upload-card${state.selectedType === "upload" ? " selected" : ""}`;
+      card.innerHTML = `
+        <div class="source-head">
+          <div>
+            <div class="source-title">Upload Video</div>
+            <div class="source-function">custom analysis</div>
+          </div>
+          <span class="pill warn">temporary</span>
+        </div>
+        <p class="source-summary">Use a local clip for this session only.</p>
+        <div>
+          <input class="upload-input" id="uploadInput" type="file" accept="video/*">
+        </div>
+        <div class="source-foot">
+          <span id="uploadName">No file selected</span>
+          <span>local session</span>
+        </div>
+      `;
+      card.addEventListener("click", event => {
+        if (event.target.tagName !== "INPUT") {
+          state.selectedType = "upload";
+          renderSources();
+        }
+      });
+      const input = card.querySelector("#uploadInput");
+      input.addEventListener("change", () => {
+        state.selectedType = "upload";
+        state.uploadFile = input.files[0] || null;
+        renderSources();
+      });
+      card.querySelector("#uploadName").textContent = state.uploadFile ? state.uploadFile.name : "No file selected";
+      return card;
+    }
+
+    function updateSelectedSummary() {
+      const source = selectedSource();
+      if (!source) return;
+      el.selectedTitle.textContent = source.title;
+      el.selectedFunction.textContent = fmtFunction(source.function);
+      el.selectedExpected.textContent = fmtExpected(source.expected);
+      el.selectedFile.textContent = source.file;
+      el.selectedStorage.textContent = source.temporary ? "temporary local session" : "cached local preset";
+    }
+
+    function setBusy(isBusy) {
+      el.analyzeButton.disabled = isBusy;
+      el.resetButton.disabled = isBusy;
+    }
+
+    async function analyzeSelected() {
+      const source = selectedSource();
+      if (!source || !source.available) {
+        setMessage("Choose an available video first.", true);
+        return;
+      }
+
+      try {
+        setBusy(true);
+        setMessage("Preparing local stream...");
+        let result;
+        if (state.selectedType === "upload") {
+          const data = new FormData();
+          data.append("file", state.uploadFile, state.uploadFile.name);
+          result = await postForm("/api/session/upload-prepare", data);
+        } else {
+          result = await postJson("/api/session/prepare", { preset: source.id });
+        }
+        state.scenario = result.scenario || source;
+        updateAnalysisScenario(result);
+        resetPhoneMessage();
+        showPage("analysis");
+        setLiveFeedVisible(true);
+        setPill(el.analysisAppStatus, "ready", "warn");
+        el.analysisFooter.textContent = "Video is loaded locally. Press the center button to start stream analysis.";
+      } catch (error) {
+        setMessage(error.message || String(error), true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function resetSession() {
+      try {
+        setBusy(true);
+        await postJson("/api/session/reset", {});
+        state.scenario = null;
+        state.latestEntries = [];
+        state.knownEvents = new Set();
+        state.firstEventPoll = true;
+        state.streamStarted = false;
+        state.analysisStarted = false;
+        clearVideoSource();
+        resetPhoneMessage();
+        setMessage("Reset complete.");
+        updateEvents([]);
+      } catch (error) {
+        setMessage(error.message || String(error), true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function setMessage(message, isError = false) {
+      el.selectMessage.textContent = message;
+      el.selectMessage.style.color = isError ? "#ffb4b4" : "";
+    }
+
+    function updateAnalysisScenario(result) {
+      const scenario = result.scenario || state.scenario || selectedSource();
+      state.scenario = scenario;
+      el.analysisTitle.textContent = scenario.title || "HomeAngel Analysis";
+      el.analysisSubtitle.textContent = `${scenario.file || "video"} | ${fmtFunction(scenario.function)}`;
+      el.analysisFooter.textContent = scenario.temporary
+        ? "Uploaded clip is temporary local Insight media for this session."
+        : "Cached preset is local. Production mode is headless.";
+      if (result.media_url) setVideoSource(result.media_url);
+      if (typeof result.stream_started === "boolean") state.streamStarted = result.stream_started;
+      if (typeof result.analysis_started === "boolean") state.analysisStarted = result.analysis_started;
+      if (result.prepared && !result.stream_started) {
+        el.analysisFooter.textContent = "Video is loaded locally. Press the center button to start stream analysis.";
+      }
+      updateFinding();
+    }
+
+    function setLiveFeedVisible(visible) {
+      state.liveFeedVisible = visible;
+      el.liveToggleButton.textContent = visible ? "Hide Live Feed" : "Show Live Feed";
+      el.liveToggleButton.setAttribute("aria-pressed", String(visible));
+      el.feedHidden.hidden = visible;
+      el.localVideo.hidden = !visible;
+      if (!visible) el.localVideo.pause();
+      updateVideoMode();
+    }
+
+    async function refreshStatus() {
+      try {
+        const status = await fetchJson("/api/status");
+        if (Array.isArray(status.presets) && status.presets.length) {
+          state.presets = status.presets;
+          renderSources();
+        }
+        if (status.scenario && status.scenario.id) {
+          state.scenario = status.scenario;
+          updateAnalysisScenario(status);
+        }
+        const insightMode = status.insight && status.insight.ok ? "good" : "bad";
+        setPill(el.selectInsightStatus, insightMode === "good" ? "Insight ready" : "Insight offline", insightMode);
+        setPill(el.analysisInsightStatus, insightMode === "good" ? "Insight ready" : "Insight offline", insightMode);
+        setPill(el.selectDevkitStatus, status.devkit_ssh_open ? "DevKit ready" : "DevKit SSH closed", status.devkit_ssh_open ? "good" : "warn");
+        updateTelegramStatus(status.telegram);
+        updateVlmStatus(status.vlm);
+        const app = status.app || {};
+        const sourceState = status.source && status.source.state;
+        state.streamStarted = sourceState === "playing";
+        if (app.running) {
+          setPill(el.analysisAppStatus, "app running", "good");
+        } else if (state.activeMediaUrl && !state.launchingAnalysis) {
+          setPill(el.analysisAppStatus, "ready", "warn");
+        } else {
+          setPill(el.analysisAppStatus, "app idle", "warn");
+        }
+        state.analysisStarted = Boolean(app.running);
+        if (!app.running && state.activeMediaUrl && !state.streamStarted) {
+          el.analysisFooter.textContent = "Video is loaded locally. Press the center button to start stream analysis.";
+        }
+        if (status.media_url) setVideoSource(status.media_url, false);
+      } catch {
+        setPill(el.selectInsightStatus, "status unavailable", "bad");
+        setPill(el.analysisInsightStatus, "status unavailable", "bad");
+        setPill(el.vlmStatus, "VLM unknown", "bad");
+      }
+    }
+
+    function normalizeState(value) {
+      const stateName = String(value || "UPRIGHT").toUpperCase().replace(/\s+/g, "_");
+      return stateName === "FALL_DETECTED" ? "FALL_CONFIRMED" : stateName;
+    }
+
+    function displayState(value) {
+      const stateName = normalizeState(value);
+      return stateName === "FALL_CONFIRMED" ? "FALL CONFIRMED" : stateName.replace(/_/g, " ");
+    }
+
+    function choosePrimaryPerson(people) {
+      if (!Array.isArray(people) || people.length === 0) return null;
+      const rank = { UPRIGHT: 0, FALLING: 1, DOWN: 2, FALL_CONFIRMED: 3, FALL_DETECTED: 3 };
+      return people.slice().sort((a, b) => {
+        const stateDelta = (rank[normalizeState(b.state)] || 0) - (rank[normalizeState(a.state)] || 0);
+        if (stateDelta !== 0) return stateDelta;
+        return Number(b.confidence || 0) - Number(a.confidence || 0);
+      })[0];
+    }
+
+    function updateTelemetry(doc) {
+      state.lastTelemetry = doc;
+      setPill(el.telemetryStatus, doc.stale_read ? "telemetry cached" : "telemetry live", doc.stale_read ? "warn" : "good");
+
+      const people = Array.isArray(doc.people) ? doc.people : [];
+      const primary = choosePrimaryPerson(people);
+      const currentState = normalizeState((primary && primary.state) || doc.state);
+      el.stateLine.className = `state-line state-${currentState.toLowerCase().replace("fall_", "")}`;
+      el.stateValue.textContent = primary
+        ? `${displayState(currentState)} | track ${primary.track_id}`
+        : displayState(currentState);
+
+      const perf = doc.performance || {};
+      el.fpsValue.textContent = fmtNumber(perf.fps, 1);
+      el.latencyValue.textContent = fmtNumber(perf.latency_ms, 1);
+      const poseCompute = (perf.compute && perf.compute.pose) || "MLA";
+      const vlmCompute = perf.compute && perf.compute.vlm && perf.compute.vlm !== "disabled"
+        ? ` | VLM: ${perf.compute.vlm}`
+        : "";
+      el.computeValue.textContent = `Pose: ${poseCompute}${vlmCompute}`;
+
+      updateVideoMode();
+
+      const thresholds = doc.thresholds || {};
+      const history = Array.isArray(doc.history) ? doc.history : [];
+      const velocityThreshold = Number(thresholds.fall_velocity_threshold || 0.45);
+      const angleThreshold = Number(thresholds.angle_threshold_deg || 60);
+      const latestVelocity = primary ? Number(primary.vertical_velocity || 0) : 0;
+      const latestAngle = primary ? Number(primary.torso_angle_deg || 0) : 0;
+
+      el.velocityReadout.textContent = `${fmtNumber(latestVelocity, 2)} / ${fmtNumber(velocityThreshold, 2)}`;
+      el.angleReadout.textContent = `${fmtNumber(latestAngle, 1)} / ${fmtNumber(angleThreshold, 0)} deg`;
+
+      const velocityCrossing = latestVelocity >= velocityThreshold;
+      const angleCrossing = latestAngle >= angleThreshold;
+      flashOnCross(el.velocityPanel, velocityCrossing, "velocity");
+      flashOnCross(el.anglePanel, angleCrossing, "angle");
+      state.lastVelocityCrossing = velocityCrossing;
+      state.lastAngleCrossing = angleCrossing;
+
+      drawGraph(el.velocityCanvas, history, "vertical_velocity", velocityThreshold, {
+        color: "#58c7e8",
+        thresholdColor: "#e34f4f",
+        floor: -0.2,
+        ceiling: Math.max(1.0, velocityThreshold * 1.8)
+      });
+      drawGraph(el.angleCanvas, history, "torso_angle_deg", angleThreshold, {
+        color: "#e5a72f",
+        thresholdColor: "#e34f4f",
+        floor: 0,
+        ceiling: Math.max(100, angleThreshold * 1.45)
+      });
+      updateFinding();
+    }
+
+    function updateFinding() {
+      const telemetry = state.lastTelemetry || {};
+      const people = Array.isArray(telemetry.people) ? telemetry.people : [];
+      const primary = choosePrimaryPerson(people);
+      const currentState = normalizeState((primary && primary.state) || telemetry.state);
+      const hasFall = state.latestEntries.some(item => item.event && item.event.event === "fall_detected");
+      const expected = state.scenario && state.scenario.expected;
+      let title = "Safe";
+      let copy = "No fall signal.";
+      let pill = "monitoring";
+      let mode = "safe";
+      let risk = 8;
+
+      if (hasFall || currentState === "FALL_CONFIRMED") {
+        title = "Fall detected";
+        copy = "Confirmed fall event emitted as JSON metadata.";
+        pill = "alert sent";
+        mode = "risky";
+        risk = 100;
+      } else if (currentState === "FALLING") {
+        title = "Motion spike";
+        copy = "Velocity or torso angle is crossing the fall rules.";
+        pill = "watching";
+        mode = "watch";
+        risk = 58;
+      } else if (currentState === "DOWN") {
+        title = expected === "safe_sit" ? "Sit-down observed" : "Person down";
+        copy = expected === "safe_sit" ? "Still no fall confirmation or alert." : "Down posture is being timed before confirmation.";
+        pill = "timing";
+        mode = "watch";
+        risk = expected === "safe_sit" ? 34 : 72;
+      } else if (expected === "safe_sit" && telemetry.updated_at_s) {
+        title = "Sit-down safe";
+        copy = "Routine sit-down stayed below alert criteria.";
+        pill = "no alert";
+        mode = "safe";
+        risk = 14;
+      } else if (expected === "safe_activity" && telemetry.updated_at_s) {
+        title = "Routine safe";
+        copy = "Daily activity stayed below alert criteria.";
+        pill = "no alert";
+        mode = "safe";
+        risk = 10;
+      } else if (expected === "fall_detected") {
+        title = "Fall scenario armed";
+        copy = "Waiting for derivative and stillness confirmation.";
+        pill = "armed";
+        mode = "safe";
+        risk = 12;
+      } else {
+        title = "Analysis active";
+        copy = "Local fall detector is monitoring the uploaded clip.";
+        pill = "monitoring";
+        mode = "safe";
+        risk = 12;
+      }
+
+      applyRisk(risk, mode, copy);
+      el.findingTitle.textContent = title;
+      el.findingTitle.className = `finding-title ${mode}`;
+      el.findingPill.textContent = pill;
+      el.findingPill.className = `pill ${mode === "risky" ? "bad" : mode === "watch" ? "warn" : "good"}`;
+      el.findingCopy.textContent = copy;
+      el.phone.classList.toggle("alert", mode === "risky");
+    }
+
+    function applyRisk(score, mode, copy) {
+      const value = Math.max(0, Math.min(100, Math.round(score)));
+      el.riskScore.textContent = `${value}%`;
+      el.riskFill.style.width = `${Math.max(6, value)}%`;
+      el.riskFill.style.backgroundColor = mode === "risky" ? "var(--red)" : mode === "watch" ? "var(--amber)" : "var(--green)";
+      el.riskLabel.textContent = mode === "risky" ? "Risky" : mode === "watch" ? "Watching" : "Safe";
+      el.riskLabel.className = `risk-label ${mode}`;
+      el.riskCopy.textContent = copy;
+    }
+
+    function setVideoSource(url, reset = true) {
+      const nextUrl = new URL(url, window.location.href).toString();
+      if (state.activeMediaUrl === nextUrl) {
+        updateVideoMode();
+        return;
+      }
+      state.activeMediaUrl = nextUrl;
+      el.localVideo.pause();
+      el.localVideo.src = nextUrl;
+      el.localVideo.load();
+      resetPhoneMessage();
+      if (reset) {
+        el.localVideo.addEventListener("loadedmetadata", () => {
+          try {
+            el.localVideo.currentTime = 0;
+          } catch {}
+        }, { once: true });
+      }
+      updateVideoMode();
+    }
+
+    function clearVideoSource() {
+      state.activeMediaUrl = "";
+      el.localVideo.pause();
+      el.localVideo.removeAttribute("src");
+      el.localVideo.load();
+      resetPhoneMessage();
+      updateVideoMode();
+    }
+
+    async function toggleVideoPlayback() {
+      if (!state.liveFeedVisible) setLiveFeedVisible(true);
+      if (!state.activeMediaUrl) return;
+      if (!el.localVideo.paused && !el.localVideo.ended) {
+        el.localVideo.pause();
+        return;
+      }
+      await startAnalysisIfNeeded();
+      if (el.localVideo.ended) {
+        resetPhoneMessage("Replaying. Message will regenerate after the video ends.");
+        el.localVideo.currentTime = 0;
+      }
+      await el.localVideo.play();
+      updateVideoMode();
+    }
+
+    async function startAnalysisIfNeeded() {
+      if (state.analysisStarted || state.launchingAnalysis) return;
+      state.launchingAnalysis = true;
+      updateVideoMode();
+      setPill(el.analysisAppStatus, "starting", "warn");
+      el.analysisFooter.textContent = "Starting local Insight stream and DevKit analysis...";
+      try {
+        const result = await postJson("/api/session/run", {});
+        updateAnalysisScenario(result);
+        state.streamStarted = Boolean(result.stream_started);
+        state.analysisStarted = Boolean(result.analysis_started);
+        if (result.analysis_error) {
+          setPill(el.analysisAppStatus, "app waiting", "warn");
+          el.analysisFooter.textContent = result.analysis_error;
+        } else {
+          setPill(el.analysisAppStatus, "app running", "good");
+          el.analysisFooter.textContent = result.message || "Local stream analysis is running.";
+        }
+      } catch (error) {
+        setPill(el.analysisAppStatus, "start failed", "bad");
+        el.analysisFooter.textContent = error.message || String(error);
+        throw error;
+      } finally {
+        state.launchingAnalysis = false;
+        updateVideoMode();
+      }
+    }
+
+    function updateVideoMode() {
+      const hasSource = Boolean(state.activeMediaUrl);
+      const paused = el.localVideo.paused || el.localVideo.ended;
+      el.playOverlayButton.classList.toggle("hidden", !state.liveFeedVisible || !hasSource || !paused);
+      el.playOverlayButton.disabled = !hasSource || state.launchingAnalysis;
+      el.playOverlayLabel.textContent = state.launchingAnalysis ? "STARTING" : el.localVideo.ended ? "REPLAY" : "PAUSED";
+      if (!state.liveFeedVisible) {
+        el.videoMode.textContent = "hidden";
+      } else if (!hasSource) {
+        el.videoMode.textContent = "no video";
+      } else if (state.launchingAnalysis) {
+        el.videoMode.textContent = "starting";
+      } else {
+        el.videoMode.textContent = paused ? "paused" : "playing";
+      }
+    }
+
+    function flashOnCross(panel, crossing, kind) {
+      const previous = kind === "velocity" ? state.lastVelocityCrossing : state.lastAngleCrossing;
+      if (crossing && !previous) {
+        panel.classList.add("flash");
+        setTimeout(() => panel.classList.remove("flash"), 380);
+      }
+    }
+
+    function drawGraph(canvas, samples, field, threshold, options) {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const width = Math.max(1, Math.floor(rect.width * dpr));
+      const height = Math.max(1, Math.floor(rect.height * dpr));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const w = rect.width;
+      const h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const pad = { left: 31, right: 8, top: 8, bottom: 18 };
+      const plotW = Math.max(1, w - pad.left - pad.right);
+      const plotH = Math.max(1, h - pad.top - pad.bottom);
+      const values = samples.map(sample => Number(sample[field])).filter(Number.isFinite);
+      const floor = Math.min(options.floor, ...values, threshold);
+      const ceiling = Math.max(options.ceiling, ...values, threshold);
+      const span = Math.max(0.001, ceiling - floor);
+      const y = value => pad.top + plotH - ((value - floor) / span) * plotH;
+
+      ctx.strokeStyle = "rgba(255,255,255,.08)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 3; i += 1) {
+        const gy = pad.top + (plotH * i / 3);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, gy);
+        ctx.lineTo(w - pad.right, gy);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = options.thresholdColor;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y(threshold));
+      ctx.lineTo(w - pad.right, y(threshold));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "rgba(244,247,248,.62)";
+      ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
+      ctx.fillText(fmtNumber(ceiling, field === "torso_angle_deg" ? 0 : 1), 2, pad.top + 4);
+      ctx.fillText(fmtNumber(floor, field === "torso_angle_deg" ? 0 : 1), 2, pad.top + plotH);
+
+      if (values.length < 2) return;
+      ctx.strokeStyle = options.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      values.forEach((value, index) => {
+        const x = pad.left + plotW * (index / Math.max(1, values.length - 1));
+        const py = y(value);
+        if (index === 0) ctx.moveTo(x, py);
+        else ctx.lineTo(x, py);
+      });
+      ctx.stroke();
+    }
+
+    function parseEvents(text) {
+      return text.split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          try {
+            return { raw: line, event: JSON.parse(line) };
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+    }
+
+    function updateEvents(entries) {
+      state.latestEntries = entries;
+      const bytes = entries.reduce((sum, item) => sum + encoder.encode(`${item.raw}\n`).length, 0);
+      el.bytesValue.textContent = fmtBytes(bytes);
+      el.eventCount.textContent = `${entries.length} ${entries.length === 1 ? "event" : "events"}`;
+
+      const newest = entries.slice().reverse();
+      el.seeMoreButton.hidden = newest.length <= visibleEventLimit && !newest.some(item => item.raw.length > 140);
+      renderEvents(el.eventsList, newest.slice(0, visibleEventLimit), true);
+
+      newest.forEach(({ raw, event }) => {
+        if (!state.knownEvents.has(raw)) {
+          state.knownEvents.add(raw);
+          if (!state.firstEventPoll) {
+            animateBoundaryToken(event);
+            if (!state.videoEnded) {
+              setPhoneFeedback("Fall event captured; final message will generate when the video ends.");
+            }
+          }
+        }
+      });
+
+      if (state.videoEnded && !state.phoneMessageReady) {
+        generatePhoneMessageAfterVideoEnd();
+      }
+      state.firstEventPoll = false;
+      updateFinding();
+    }
+
+    function renderEvents(container, entries, compact) {
+      container.innerHTML = "";
+      if (entries.length === 0) {
+        const scenario = state.scenario || selectedSource();
+        if (scenario && (scenario.expected === "safe_sit" || scenario.expected === "safe_activity")) {
+          const safe = document.createElement("article");
+          safe.className = "event-card safe-card";
+          const title = document.createElement("strong");
+          title.textContent = scenario.expected === "safe_sit" ? "Sit-down: no alert" : "Routine activity: no alert";
+          const detail = document.createElement("span");
+          detail.textContent = "Only local telemetry is updating.";
+          safe.append(title, detail);
+          container.appendChild(safe);
+          return;
+        }
+        container.innerHTML = '<div class="empty">No transmitted events.</div>';
+        return;
+      }
+      entries.forEach(({ event }) => container.appendChild(eventCard(event, compact)));
+    }
+
+    function eventCard(event, compact) {
+      const card = document.createElement("article");
+      card.className = "event-card";
+      const title = document.createElement("strong");
+      title.textContent = `${formatEventTime(event)} - ${friendlyEvent(event.event)} - ${titleCase(event.zone_label || "unknown zone")}`;
+      const detail = document.createElement("span");
+      detail.textContent = `confidence ${fmtNumber(event.confidence, 2)} | track ${event.track_id}`;
+      card.append(title, detail);
+      if (event.description) {
+        const description = document.createElement("span");
+        description.textContent = event.description;
+        card.appendChild(description);
+      }
+      if (!compact) {
+        const raw = document.createElement("span");
+        raw.textContent = JSON.stringify(event);
+        card.appendChild(raw);
+      }
+      return card;
+    }
+
+    function openEventModal() {
+      renderEvents(el.modalEventsList, state.latestEntries.slice().reverse(), false);
+      el.eventModal.hidden = false;
+    }
+
+    function closeEventModal() {
+      el.eventModal.hidden = true;
+    }
+
+    function formatEventTime(event) {
+      const seconds = Number(event.timestamp_s);
+      if (Number.isFinite(seconds)) return `T+${seconds.toFixed(2)}s`;
+      return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+
+    function friendlyEvent(name) {
+      return String(name || "event").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function titleCase(value) {
+      return String(value).replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function telegramText(event) {
+      const zone = event.zone_label || "unknown zone";
+      const device = event.device_id || "unknown device";
+      const confidence = fmtNumber(event.confidence, 2);
+      let text = `HomeAngel AI fall detected in ${zone}. Device ${device}. Track ${event.track_id}. Confidence ${confidence}.`;
+      if (event.description) text += ` ${event.description}`;
+      return text;
+    }
+
+    function latestFallEvent() {
+      const newest = state.latestEntries.slice().reverse();
+      const item = newest.find(entry => entry.event && entry.event.event === "fall_detected");
+      return item && item.event;
+    }
+
+    function generatePhoneMessageAfterVideoEnd() {
+      state.videoEnded = true;
+      const event = latestFallEvent();
+      if (!event) {
+        state.phoneMessageReady = false;
+        el.phoneMessage.textContent = "Video ended. No fall detected, so no family message was generated.";
+        el.phoneInput.value = "";
+        setPhoneFeedback("No outbound family alert is needed for this run.");
+        updatePhoneSendState();
+        return;
+      }
+
+      const text = telegramText(event);
+      state.phoneMessageReady = true;
+      el.phoneMessage.textContent = text;
+      el.phoneInput.value = text;
+      setPhoneFeedback(state.telegram && state.telegram.ready
+        ? "Final text-only Telegram message is ready."
+        : "Final message generated. Configure Telegram to send it.");
+      pulsePhone();
+      updatePhoneSendState();
+    }
+
+    function handleVideoEnded() {
+      updateVideoMode();
+      generatePhoneMessageAfterVideoEnd();
+    }
+
+    async function sendPhoneMessage(event) {
+      event.preventDefault();
+      if (!state.videoEnded) {
+        setPhoneFeedback("Wait until the video ends before creating the family message.", true);
+        return;
+      }
+      if (!state.phoneMessageReady) {
+        setPhoneFeedback("No fall event was detected, so no family message was generated.", true);
+        return;
+      }
+      const message = el.phoneInput.value.trim();
+      if (!message) {
+        setPhoneFeedback("Write a message before sending.", true);
+        return;
+      }
+      el.phoneSendButton.disabled = true;
+      setPhoneFeedback("Sending text-only Telegram message...");
+      try {
+        const result = await postJson("/api/telegram/test", { message });
+        const sent = Number(result.sent || 0);
+        el.phoneMessage.textContent = message;
+        pulsePhone();
+        updateTelegramStatus(result.telegram);
+        setPhoneFeedback(`Sent to ${sent} chat${sent === 1 ? "" : "s"}.`);
+      } catch (error) {
+        setPhoneFeedback(error.message || String(error), true);
+      } finally {
+        updatePhoneSendState();
+      }
+    }
+
+    function pulsePhone() {
+      el.phone.classList.add("alert");
+      setTimeout(() => el.phone.classList.remove("alert"), 900);
+    }
+
+    function animateBoundaryToken(event) {
+      const token = document.createElement("div");
+      token.className = "token";
+      token.textContent = `${event.event || "fall_detected"} JSON`;
+      document.body.appendChild(token);
+      setTimeout(() => token.remove(), 1400);
+    }
+
+    function fmtNumber(value, digits = 1) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "--";
+      return number.toFixed(digits);
+    }
+
+    function fmtBytes(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    async function fetchJson(path) {
+      const response = await fetch(`${path}?t=${Date.now()}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(String(response.status));
+      return response.json();
+    }
+
+    async function fetchText(path) {
+      const response = await fetch(`${path}?t=${Date.now()}`, { cache: "no-store" });
+      if (response.status === 404) return "";
+      if (!response.ok) throw new Error(String(response.status));
+      return response.text();
+    }
+
+    async function postJson(path, body) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {})
+      });
+      return parseApiResponse(response);
+    }
+
+    async function postForm(path, formData) {
+      const response = await fetch(path, { method: "POST", body: formData });
+      return parseApiResponse(response);
+    }
+
+    async function parseApiResponse(response) {
+      const text = await response.text();
+      let payload = {};
+      try {
+        payload = text ? JSON.parse(text) : {};
+      } catch {
+        payload = { message: text };
+      }
+      if (!response.ok) {
+        throw new Error(payload.error || payload.message || `${response.status}`);
+      }
+      return payload;
+    }
+
+    async function pollTelemetry() {
+      try {
+        updateTelemetry(await fetchJson(telemetryPath));
+      } catch {
+        setPill(el.telemetryStatus, "telemetry waiting", "");
+      }
+    }
+
+    async function pollEvents() {
+      try {
+        updateEvents(parseEvents(await fetchText(eventsPath)));
+      } catch {
+        updateEvents([]);
+      }
+    }
+
+    el.analyzeButton.addEventListener("click", analyzeSelected);
+    el.resetButton.addEventListener("click", resetSession);
+    el.backButton.addEventListener("click", () => showPage("select"));
+    el.liveToggleButton.addEventListener("click", () => setLiveFeedVisible(!state.liveFeedVisible));
+    el.playOverlayButton.addEventListener("click", () => {
+      toggleVideoPlayback().catch(() => updateVideoMode());
+    });
+    el.localVideo.addEventListener("play", updateVideoMode);
+    el.localVideo.addEventListener("pause", updateVideoMode);
+    el.localVideo.addEventListener("ended", handleVideoEnded);
+    el.localVideo.addEventListener("loadedmetadata", updateVideoMode);
+    el.localVideo.addEventListener("error", updateVideoMode);
+    el.seeMoreButton.addEventListener("click", openEventModal);
+    el.closeModalButton.addEventListener("click", closeEventModal);
+    el.phoneInput.addEventListener("input", () => {
+      updatePhoneSendState();
+    });
+    el.phoneCompose.addEventListener("submit", sendPhoneMessage);
+    el.eventModal.addEventListener("click", event => {
+      if (event.target === el.eventModal) closeEventModal();
+    });
+    window.addEventListener("keydown", event => {
+      if (event.key === "Escape") closeEventModal();
+    });
+    window.addEventListener("resize", () => {
+      if (state.lastTelemetry) updateTelemetry(state.lastTelemetry);
+    });
+
+    resetPhoneMessage();
+    refreshStatus();
+    pollTelemetry();
+    pollEvents();
+    setInterval(refreshStatus, 4000);
+    setInterval(pollTelemetry, 180);
+    setInterval(pollEvents, 1000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,270 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_ROOT="${HOMEANGEL_APP_ROOT:-/workspace/labs/homeangel-ai}"
+CONFIG="${HOMEANGEL_APP_CONFIG:-${APP_ROOT}/config.devkit.yaml}"
+BIND="${HOMEANGEL_CONSOLE_BIND:-127.0.0.1}"
+PORT="${HOMEANGEL_CONSOLE_PORT:-8765}"
+INSIGHT_URL="${HOMEANGEL_INSIGHT_URL:-https://127.0.0.1:9900}"
+DEVKIT_HOST="${HOMEANGEL_DEVKIT_HOST:-192.168.1.20}"
+BUILD=1
+START_VLM=1
+CHECK_ONLY=0
+
+usage() {
+  cat <<USAGE
+Usage: ./AngelStart [options]
+
+Starts the HomeAngel demo session:
+  1. checks Insight and DevKit access
+  2. builds HomeAngel if needed
+  3. validates the runtime config
+  4. starts the optional local VLM server when vlm.enabled=true
+  5. serves the local demo console
+
+Options:
+  --config PATH      Config to validate/use (default: ${CONFIG})
+  --bind ADDRESS    Console bind address (default: ${BIND})
+  --port PORT       Console port (default: ${PORT})
+  --no-build        Skip the CMake build step
+  --no-vlm          Do not start the VLM server even if enabled
+  --check-only      Run checks and exit without starting the console
+  -h, --help        Show this help
+
+Telegram token:
+  export HOMEANGEL_TELEGRAM_BOT_TOKEN="<bot-token>"
+  Keep chat routing in config.devkit.yaml under alerts.telegram.routes.
+USAGE
+}
+
+log() {
+  printf '[AngelStart] %s\n' "$*"
+}
+
+warn() {
+  printf '[AngelStart][warn] %s\n' "$*" >&2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config)
+      [[ $# -ge 2 ]] || { echo "--config requires a path" >&2; exit 2; }
+      CONFIG="$2"
+      shift 2
+      ;;
+    --bind)
+      [[ $# -ge 2 ]] || { echo "--bind requires an address" >&2; exit 2; }
+      BIND="$2"
+      shift 2
+      ;;
+    --port)
+      [[ $# -ge 2 ]] || { echo "--port requires a port" >&2; exit 2; }
+      PORT="$2"
+      shift 2
+      ;;
+    --no-build)
+      BUILD=0
+      shift
+      ;;
+    --no-vlm)
+      START_VLM=0
+      shift
+      ;;
+    --check-only)
+      CHECK_ONLY=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+cd "${APP_ROOT}"
+
+require_file() {
+  [[ -e "$1" ]] || { echo "missing required path: $1" >&2; exit 1; }
+}
+
+yaml_value() {
+  local key="$1"
+  local default_value="${2:-}"
+  python3 - "$CONFIG" "$key" "$default_value" <<'PY'
+import sys
+
+config_path, dotted, default = sys.argv[1:4]
+try:
+    import yaml
+    with open(config_path, "r", encoding="utf-8") as fh:
+        value = yaml.safe_load(fh) or {}
+    for part in dotted.split("."):
+        if isinstance(value, dict) and part in value:
+            value = value[part]
+        else:
+            value = default
+            break
+    if value is None:
+        value = ""
+    if isinstance(value, bool):
+        print("true" if value else "false")
+    else:
+        print(value)
+except Exception:
+    print(default)
+PY
+}
+
+check_insight() {
+  if curl -kfsS --max-time 2 "${INSIGHT_URL}/api/health" >/dev/null 2>&1; then
+    log "Insight ready at ${INSIGHT_URL}"
+    return
+  fi
+
+  if command -v insight-admin >/dev/null 2>&1; then
+    warn "Insight did not answer; trying insight-admin start"
+    insight-admin start >/dev/null 2>&1 || true
+    sleep 2
+    if curl -kfsS --max-time 2 "${INSIGHT_URL}/api/health" >/dev/null 2>&1; then
+      log "Insight ready at ${INSIGHT_URL}"
+      return
+    fi
+  fi
+
+  warn "Insight is not responding at ${INSIGHT_URL}; start it before running analysis"
+}
+
+check_devkit() {
+  local runner=0
+  if command -v dk >/dev/null 2>&1 || bash -lic 'declare -F dk >/dev/null || command -v dk >/dev/null' >/dev/null 2>&1; then
+    log "DevKit runner available through dk"
+    runner=1
+  elif command -v devkit-run >/dev/null 2>&1; then
+    log "DevKit runner available through devkit-run"
+    runner=1
+  else
+    warn "DevKit runner not found; the console can open, but analysis cannot start until dk/devkit-run is available"
+  fi
+
+  if timeout 2 bash -c ":</dev/tcp/${DEVKIT_HOST}/22" >/dev/null 2>&1; then
+    log "DevKit SSH reachable at ${DEVKIT_HOST}:22"
+    return
+  fi
+
+  if [[ "$runner" -eq 1 ]]; then
+    warn "DevKit SSH is not reachable at ${DEVKIT_HOST}:22; the console can open, but analysis cannot start"
+  fi
+}
+
+build_if_needed() {
+  if [[ "$BUILD" -eq 0 ]]; then
+    log "Skipping build"
+    return
+  fi
+  if [[ ! -x "${APP_ROOT}/build/homeangel-ai" ]] ||
+     [[ "${APP_ROOT}/src/main.cpp" -nt "${APP_ROOT}/build/homeangel-ai" ]] ||
+     [[ "${APP_ROOT}/CMakeLists.txt" -nt "${APP_ROOT}/build/homeangel-ai" ]]; then
+    log "Building HomeAngel"
+    cmake -S "${APP_ROOT}" -B "${APP_ROOT}/build" -DCMAKE_BUILD_TYPE=Release
+    cmake --build "${APP_ROOT}/build" --parallel
+  else
+    log "Build is current"
+  fi
+}
+
+validate_config() {
+  require_file "$CONFIG"
+  require_file "${APP_ROOT}/run_homeangel.sh"
+  log "Validating ${CONFIG}"
+  "${APP_ROOT}/run_homeangel.sh" --config "$CONFIG" --validate-config-only
+}
+
+report_telegram() {
+  local enabled token_env routes
+  enabled="$(yaml_value alerts.telegram.enabled false)"
+  token_env="$(yaml_value alerts.telegram.token_env HOMEANGEL_TELEGRAM_BOT_TOKEN)"
+  routes="$(yaml_value alerts.telegram.routes "")"
+  if [[ "$enabled" != "true" ]]; then
+    log "Telegram disabled"
+    return
+  fi
+  if [[ -z "${!token_env:-}" ]]; then
+    warn "Telegram enabled, but ${token_env} is not exported"
+  else
+    log "Telegram token present in ${token_env}"
+  fi
+  if [[ -z "$routes" ]]; then
+    warn "Telegram enabled, but alerts.telegram.routes is empty"
+  else
+    log "Telegram routes configured"
+  fi
+}
+
+start_vlm_if_enabled() {
+  local enabled log_path check_output
+  enabled="$(yaml_value vlm.enabled false)"
+  if [[ "$enabled" != "true" ]]; then
+    log "VLM disabled"
+    return
+  fi
+  if [[ "$START_VLM" -eq 0 ]]; then
+    log "VLM enabled in config, but --no-vlm was set"
+    return
+  fi
+
+  log_path="${APP_ROOT}/vlm_server.log"
+  log "Checking VLM model availability on the DevKit"
+  set +e
+  check_output="$(bash -lic "dk /bin/bash ${APP_ROOT}/run_vlm_server.sh --config ${CONFIG} --check-config" 2>&1)"
+  local rc=$?
+  set -e
+  printf '%s\n' "$check_output" | sed 's/^/[AngelStart][vlm] /'
+  if [[ "$rc" -ne 0 ]] || ! grep -Eq 'installed local model directories found: [1-9]' <<<"$check_output"; then
+    warn "VLM server not started; deploy Gemma/Qwen locally or update vlm.model_paths"
+    return
+  fi
+
+  if pgrep -af "${APP_ROOT}/run_vlm_server.sh.*--config ${CONFIG}" >/dev/null 2>&1; then
+    log "VLM server already appears to be running"
+    return
+  fi
+
+  log "Starting VLM server in background; log: ${log_path}"
+  nohup bash -lic "dk /bin/bash ${APP_ROOT}/run_vlm_server.sh --config ${CONFIG}" \
+    >"${log_path}" 2>&1 &
+  echo "$!" > "${APP_ROOT}/vlm_server.pid"
+  sleep 2
+  if ! kill -0 "$(cat "${APP_ROOT}/vlm_server.pid")" >/dev/null 2>&1; then
+    warn "VLM server exited early; inspect ${log_path}"
+  fi
+}
+
+start_console() {
+  export HOMEANGEL_APP_CONFIG="$CONFIG"
+  export HOMEANGEL_CONSOLE_BIND="$BIND"
+  export HOMEANGEL_CONSOLE_PORT="$PORT"
+  export HOMEANGEL_INSIGHT_URL="$INSIGHT_URL"
+
+  log "Console URL: http://${BIND}:${PORT}/console/"
+  log "Choose a video, then press the large center play button to start local stream analysis"
+  exec "${APP_ROOT}/serve_console.sh"
+}
+
+check_insight
+check_devkit
+build_if_needed
+validate_config
+report_telegram
+start_vlm_if_enabled
+
+if [[ "$CHECK_ONLY" -eq 1 ]]; then
+  log "Check-only complete"
+  exit 0
+fi
+
+start_console
