@@ -80,6 +80,8 @@ SCENARIO_LOCK = threading.Lock()
 CURRENT_SCENARIO = None
 ERROR_LOCK = threading.Lock()
 LAST_ANALYSIS_ERROR = ""
+DEVKIT_STATUS_LOCK = threading.Lock()
+DEVKIT_STATUS_CACHE = {"checked_at": 0.0, "open": False}
 
 
 def read_text_tail(path, limit=1600):
@@ -367,12 +369,24 @@ def current_analysis_error():
         return LAST_ANALYSIS_ERROR
 
 
-def devkit_ssh_open(timeout=1.0):
+def devkit_ssh_open(timeout=1.0, max_age=0.0, force=False):
+    now = time.monotonic()
+    if not force and max_age > 0:
+        with DEVKIT_STATUS_LOCK:
+            age = now - DEVKIT_STATUS_CACHE["checked_at"]
+            if age < max_age:
+                return DEVKIT_STATUS_CACHE["open"]
+
     try:
         with socket.create_connection((DEVKIT_HOST, 22), timeout=timeout):
-            return True
+            is_open = True
     except OSError:
-        return False
+        is_open = False
+
+    with DEVKIT_STATUS_LOCK:
+        DEVKIT_STATUS_CACHE["checked_at"] = time.monotonic()
+        DEVKIT_STATUS_CACHE["open"] = is_open
+    return is_open
 
 
 def app_state():
@@ -586,7 +600,7 @@ def start_app():
         raise RuntimeError(f"app binary not found: {APP_BINARY}")
     if not APP_CONFIG.exists():
         raise RuntimeError(f"app config not found: {APP_CONFIG}")
-    if not devkit_ssh_open():
+    if not devkit_ssh_open(timeout=1.0, force=True):
         raise RuntimeError(f"DevKit SSH is not reachable at {DEVKIT_HOST}:22")
 
     with PROCESS_LOCK:
@@ -863,7 +877,7 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
                 "viewer_url": view,
                 "media_url": media_url(source.get("file")) if source.get("file") else "",
                 "devkit_host": DEVKIT_HOST,
-                "devkit_ssh_open": devkit_ssh_open(),
+                "devkit_ssh_open": devkit_ssh_open(timeout=0.2, max_age=10.0),
                 "presets": [public_preset(preset) for preset in PRESETS],
                 "scenario": current_scenario(),
                 "analysis_error": current_analysis_error(),
