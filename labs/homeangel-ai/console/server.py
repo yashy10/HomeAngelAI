@@ -784,6 +784,13 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def do_HEAD(self):
+        path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/api/media/"):
+            self.handle_media_proxy(path.removeprefix("/api/media/"), method="HEAD", send_body=False)
+            return
+        super().do_HEAD()
+
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         try:
@@ -828,7 +835,7 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def handle_media_proxy(self, raw_path):
+    def handle_media_proxy(self, raw_path, method="GET", send_body=True):
         media_path = validate_media_path(raw_path)
         headers = {}
         if self.headers.get("Range"):
@@ -836,7 +843,7 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
         request = urllib.request.Request(
             f"{INSIGHT_BASE}/media/{urllib.parse.quote(media_path, safe='/')}",
             headers=headers,
-            method="GET",
+            method=method,
         )
         try:
             with urllib.request.urlopen(request, context=SSL_CONTEXT, timeout=120) as response:
@@ -849,6 +856,8 @@ class HomeAngelHandler(SimpleHTTPRequestHandler):
                 if not response.headers.get("Accept-Ranges"):
                     self.send_header("Accept-Ranges", "bytes")
                 self.end_headers()
+                if not send_body:
+                    return
                 while True:
                     chunk = response.read(1024 * 1024)
                     if not chunk:
