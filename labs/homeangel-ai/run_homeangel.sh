@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+APP_ROOT="${HOMEANGEL_APP_ROOT:-/workspace/labs/homeangel-ai}"
+ENV_FILE="${HOMEANGEL_ENV_FILE:-${APP_ROOT}/.env.local}"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
 library_paths=(
   /workspace/labs/homeangel-ai/libcompat
   /lib/aarch64-linux-gnu
@@ -21,4 +31,4 @@ fi
 joined_paths="$(IFS=:; echo "${library_paths[*]}")"
 export LD_LIBRARY_PATH="${joined_paths}:${LD_LIBRARY_PATH:-}"
 
-exec /workspace/labs/homeangel-ai/build/homeangel-ai "$@"
+exec "${APP_ROOT}/build/homeangel-ai" "$@"

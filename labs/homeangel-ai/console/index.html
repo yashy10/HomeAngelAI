@@ -1404,6 +1404,10 @@
         el.telegramStatus.textContent = "missing token";
         el.telegramStatus.classList.add("missing");
         setPhoneFeedback(`Export ${telegram.token_env} before starting the console.`, true);
+      } else if (Array.isArray(telegram.missing_chat_envs) && telegram.missing_chat_envs.length) {
+        el.telegramStatus.textContent = "missing chat ID";
+        el.telegramStatus.classList.add("missing");
+        setPhoneFeedback(`Set ${telegram.missing_chat_envs[0]} in .env.local.`, true);
       } else {
         el.telegramStatus.textContent = "no route";
         el.telegramStatus.classList.add("missing");

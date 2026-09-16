@@ -53,6 +53,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -631,7 +632,8 @@ private:
   std::unordered_map<int, TrackFallMemory> tracks_;
 };
 
-int run_process(const std::vector<std::string>& args) {
+int run_process(const std::vector<std::string>& args,
+                const std::vector<std::pair<std::string, std::string>>& env = {}) {
   if (args.empty()) {
     return -1;
   }
@@ -644,6 +646,9 @@ int run_process(const std::vector<std::string>& args) {
 
   const pid_t pid = fork();
   if (pid == 0) {
+    for (const auto& [key, value] : env) {
+      setenv(key.c_str(), value.c_str(), 1);
+    }
     execvp(argv[0], argv.data());
     _exit(127);
   }
@@ -1038,6 +1043,9 @@ private:
   std::string endpoint_;
 };
 
+std::optional<std::string> env_reference_name(const std::string& value);
+std::string resolve_env_reference(const std::string& value);
+
 class AlertSink {
 public:
   explicit AlertSink(AppConfig cfg) : cfg_(std::move(cfg)) {}
@@ -1087,7 +1095,15 @@ private:
     for (const auto& route : cfg_.telegram_routes) {
       if (route.selector == "*" || route.selector == cfg_.zone_label ||
           route.selector == cfg_.device_id) {
-        chat_ids.push_back(route.chat_id);
+        const std::string chat_id = resolve_env_reference(route.chat_id);
+        if (chat_id.empty()) {
+          if (const auto env_name = env_reference_name(route.chat_id)) {
+            std::cerr << "[warn] Telegram route " << route.selector << " references "
+                      << *env_name << ", but it is not set\n";
+          }
+          continue;
+        }
+        chat_ids.push_back(chat_id);
       }
     }
     return chat_ids;
@@ -1104,7 +1120,6 @@ private:
       return;
     }
 
-    const std::string url = std::string("https://api.telegram.org/bot") + token + "/sendMessage";
     const std::string text = "HomeAngel AI fall detected in " + cfg_.zone_label +
                              " (device " + cfg_.device_id + ", track " +
                              std::to_string(event.at("track_id").get<int>()) + ", confidence " +
@@ -1115,7 +1130,15 @@ private:
 
     for (const auto& chat_id : chat_ids) {
       nlohmann::json body = {{"chat_id", chat_id}, {"text", text}};
-      post_json(url, body.dump(), "Telegram sendMessage");
+      const std::string script =
+          "curl -fsS -m 5 -H 'Content-Type: application/json' -d \"$1\" "
+          "\"https://api.telegram.org/bot${HOMEANGEL_TELEGRAM_SEND_TOKEN}/sendMessage\"";
+      const int rc = run_process(
+          {"sh", "-c", script, "homeangel-telegram", body.dump()},
+          {{"HOMEANGEL_TELEGRAM_SEND_TOKEN", token}});
+      if (rc != 0) {
+        std::cerr << "[warn] Telegram sendMessage POST failed with exit code " << rc << "\n";
+      }
     }
   }
 
@@ -1423,6 +1446,42 @@ bool is_loopback_host(const std::string& host) {
   const std::string lowered = lower_copy(sima_examples::trim_copy(host));
   return lowered == "127.0.0.1" || lowered == "localhost" || lowered == "::1" ||
          lowered == "[::1]";
+}
+
+bool is_valid_env_name(const std::string& value) {
+  if (value.empty()) {
+    return false;
+  }
+  const auto is_name_char = [](char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+  };
+  if (!std::isalpha(static_cast<unsigned char>(value.front())) && value.front() != '_') {
+    return false;
+  }
+  return std::all_of(value.begin() + 1, value.end(), is_name_char);
+}
+
+std::optional<std::string> env_reference_name(const std::string& value) {
+  const std::string trimmed = sima_examples::trim_copy(value);
+  std::string name;
+  if (trimmed.size() > 3 && trimmed.rfind("${", 0) == 0 && trimmed.back() == '}') {
+    name = trimmed.substr(2, trimmed.size() - 3);
+  } else if (trimmed.size() > 1 && trimmed.front() == '$') {
+    name = trimmed.substr(1);
+  }
+  if (!is_valid_env_name(name)) {
+    return std::nullopt;
+  }
+  return name;
+}
+
+std::string resolve_env_reference(const std::string& value) {
+  const auto env_name = env_reference_name(value);
+  if (!env_name) {
+    return sima_examples::trim_copy(value);
+  }
+  const char* resolved = std::getenv(env_name->c_str());
+  return resolved == nullptr ? std::string{} : sima_examples::trim_copy(resolved);
 }
 
 std::vector<AlertRoute> parse_alert_routes(const std::string& value) {

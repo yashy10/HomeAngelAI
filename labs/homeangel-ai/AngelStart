@@ -7,6 +7,7 @@ BIND="${HOMEANGEL_CONSOLE_BIND:-127.0.0.1}"
 PORT="${HOMEANGEL_CONSOLE_PORT:-8765}"
 INSIGHT_URL="${HOMEANGEL_INSIGHT_URL:-https://127.0.0.1:9900}"
 DEVKIT_HOST="${HOMEANGEL_DEVKIT_HOST:-192.168.1.20}"
+ENV_FILE="${HOMEANGEL_ENV_FILE:-${APP_ROOT}/.env.local}"
 BUILD=1
 START_VLM=1
 CHECK_ONLY=0
@@ -32,7 +33,9 @@ Options:
   -h, --help        Show this help
 
 Telegram token:
-  export HOMEANGEL_TELEGRAM_BOT_TOKEN="<bot-token>"
+  Put local-only values in ${APP_ROOT}/.env.local:
+    export HOMEANGEL_TELEGRAM_BOT_TOKEN="<bot-token>"
+    export HOMEANGEL_TELEGRAM_CHAT_ID="<chat-id>"
   Keep chat routing in config.devkit.yaml under alerts.telegram.routes.
 USAGE
 }
@@ -43,6 +46,18 @@ log() {
 
 warn() {
   printf '[AngelStart][warn] %s\n' "$*" >&2
+}
+
+load_local_env() {
+  if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+    log "Loaded local environment from ${ENV_FILE}"
+  else
+    warn "No ${ENV_FILE}; Telegram can still work if variables are exported in the shell"
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -117,6 +132,34 @@ try:
         print(value)
 except Exception:
     print(default)
+PY
+}
+
+telegram_route_envs() {
+  python3 - "$CONFIG" <<'PY'
+import re
+import sys
+
+try:
+    import yaml
+    with open(sys.argv[1], "r", encoding="utf-8") as fh:
+        cfg = yaml.safe_load(fh) or {}
+    routes = ((cfg.get("alerts") or {}).get("telegram") or {}).get("routes") or ""
+    if isinstance(routes, list):
+        route_text = ",".join(str(item) for item in routes)
+    elif isinstance(routes, dict):
+        route_text = ",".join(str(value) for value in routes.values())
+    else:
+        route_text = str(routes)
+    names = []
+    for match in re.finditer(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)", route_text):
+        name = match.group(1) or match.group(2)
+        if name not in names:
+            names.append(name)
+    for name in names:
+        print(name)
+except Exception:
+    pass
 PY
 }
 
@@ -203,6 +246,15 @@ report_telegram() {
   else
     log "Telegram routes configured"
   fi
+  local route_env
+  while IFS= read -r route_env; do
+    [[ -n "$route_env" ]] || continue
+    if [[ -z "${!route_env:-}" ]]; then
+      warn "Telegram route references ${route_env}, but it is not set"
+    else
+      log "Telegram route value present in ${route_env}"
+    fi
+  done < <(telegram_route_envs)
 }
 
 start_vlm_if_enabled() {
@@ -255,6 +307,7 @@ start_console() {
   exec "${APP_ROOT}/serve_console.sh"
 }
 
+load_local_env
 check_insight
 check_devkit
 build_if_needed

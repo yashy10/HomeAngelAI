@@ -3,6 +3,7 @@ import argparse
 import cgi
 import json
 import os
+import re
 import shlex
 import signal
 import socket
@@ -29,6 +30,7 @@ INSIGHT_SOURCE_INDEX = int(os.environ.get("HOMEANGEL_INSIGHT_SOURCE", "1"))
 DEVKIT_HOST = os.environ.get("HOMEANGEL_DEVKIT_HOST", "192.168.1.20")
 APP_CONFIG = Path(os.environ.get("HOMEANGEL_APP_CONFIG", str(APP_ROOT / "config.devkit.yaml")))
 APP_BINARY = Path(os.environ.get("HOMEANGEL_APP_BINARY", str(APP_ROOT / "build/homeangel-ai")))
+APP_RUNNER = Path(os.environ.get("HOMEANGEL_APP_RUNNER", str(APP_ROOT / "run_homeangel.sh")))
 APP_LOG = APP_ROOT / "console_app.log"
 OUTPUT_FILES = [
     APP_ROOT / "events.log",
@@ -124,6 +126,24 @@ def route_items(routes):
     return items
 
 
+def env_reference_name(value):
+    text = str(value or "").strip()
+    match = re.fullmatch(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", text)
+    if match:
+        return match.group(1)
+    match = re.fullmatch(r"\$([A-Za-z_][A-Za-z0-9_]*)", text)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def resolve_env_reference(value):
+    env_name = env_reference_name(value)
+    if env_name:
+        return os.environ.get(env_name, "").strip()
+    return str(value or "").strip()
+
+
 def telegram_settings():
     try:
         raw = load_config_doc()
@@ -144,11 +164,20 @@ def telegram_settings():
     enabled = bool(telegram.get("enabled", False))
     token_env = str(telegram.get("token_env", "HOMEANGEL_TELEGRAM_BOT_TOKEN") or "HOMEANGEL_TELEGRAM_BOT_TOKEN")
     routes = route_items(telegram.get("routes"))
-    chat_ids = [
-        chat.strip()
-        for selector, chat in routes
-        if selector.strip() in {"*", zone_label, device_id} and chat.strip()
-    ]
+    chat_ids = []
+    chat_envs = []
+    missing_chat_envs = []
+    for selector, chat in routes:
+        if selector.strip() not in {"*", zone_label, device_id}:
+            continue
+        env_name = env_reference_name(chat)
+        if env_name:
+            chat_envs.append(env_name)
+        resolved_chat = resolve_env_reference(chat)
+        if resolved_chat:
+            chat_ids.append(resolved_chat)
+        elif env_name:
+            missing_chat_envs.append(env_name)
     token_present = bool(os.environ.get(token_env))
     return {
         "enabled": enabled,
@@ -157,6 +186,8 @@ def telegram_settings():
         "token_present": token_present,
         "chat_count": len(chat_ids),
         "route_count": len(routes),
+        "chat_envs": sorted(set(chat_envs)),
+        "missing_chat_envs": sorted(set(missing_chat_envs)),
         "zone_label": zone_label,
         "device_id": device_id,
         "_chat_ids": chat_ids,
@@ -509,6 +540,8 @@ def start_app():
     global APP_PROCESS
     if not APP_BINARY.exists():
         raise RuntimeError(f"app binary not found: {APP_BINARY}")
+    if not APP_RUNNER.exists():
+        raise RuntimeError(f"app runner not found: {APP_RUNNER}")
     if not APP_CONFIG.exists():
         raise RuntimeError(f"app config not found: {APP_CONFIG}")
     if not devkit_ssh_open():
@@ -521,13 +554,7 @@ def start_app():
         clear_outputs()
         APP_LOG.parent.mkdir(parents=True, exist_ok=True)
         log_file = APP_LOG.open("ab", buffering=0)
-        command_parts = ["dk"]
-        telegram = telegram_settings()
-        token_env = telegram.get("token_env") or "HOMEANGEL_TELEGRAM_BOT_TOKEN"
-        token = os.environ.get(token_env)
-        if telegram.get("enabled") and token:
-            command_parts.extend(["/usr/bin/env", f"{token_env}={token}"])
-        command_parts.extend([str(APP_BINARY), "--config", str(APP_CONFIG)])
+        command_parts = ["dk", str(APP_RUNNER), "--config", str(APP_CONFIG)]
         command = " ".join(shlex.quote(part) for part in command_parts)
         APP_PROCESS = subprocess.Popen(
             ["bash", "-lic", command],

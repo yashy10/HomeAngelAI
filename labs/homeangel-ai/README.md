@@ -28,6 +28,8 @@ HomeAngel AI keeps video fully local. Frames are decoded and used for inference 
 - Demo console: `/workspace/labs/homeangel-ai/console/index.html`
 - Demo console server: `/workspace/labs/homeangel-ai/console/server.py`
 - Console server helper: `/workspace/labs/homeangel-ai/serve_console.sh`
+- Local Telegram env template: `/workspace/labs/homeangel-ai/.env.example`
+- Local Telegram env file, ignored by Git: `/workspace/labs/homeangel-ai/.env.local`
 - Local VLM server helper: `/workspace/labs/homeangel-ai/run_vlm_server.sh`
 - Local VLM server source: `/workspace/labs/homeangel-ai/vlm_server.py`
 - Dashboard: `/workspace/labs/homeangel-ai/dashboard/index.html`
@@ -328,26 +330,46 @@ then raise `fall_velocity_threshold`.
 
 ## Telegram Alert Action
 
-Telegram is disabled by default. To enable it, put only the routing in
-`/workspace/labs/homeangel-ai/config.devkit.yaml`:
+Telegram is enabled in the demo configs on this branch, but it will not send until
+you provide a local bot token and chat ID. The token is never stored in YAML and is
+ignored by Git.
+
+Put the token and target family chat ID here:
+
+```bash
+nano /workspace/labs/homeangel-ai/.env.local
+```
+
+Fill in:
+
+```bash
+export HOMEANGEL_TELEGRAM_BOT_TOKEN="<bot-token>"
+export HOMEANGEL_TELEGRAM_CHAT_ID="<chat-id>"
+```
+
+`AngelStart`, `serve_console.sh`, and `run_homeangel.sh` load `.env.local`
+automatically. You can also export the same variables in the shell instead.
+
+The routing stays in `/workspace/labs/homeangel-ai/config.devkit.yaml`:
 
 ```yaml
 alerts:
   telegram:
     enabled: true
     token_env: HOMEANGEL_TELEGRAM_BOT_TOKEN
-    routes: bedroom=<chat-id>
-```
-
-Then export the bot token in the terminal before starting the console or running
-the app. Do not put the token in YAML:
-
-```bash
-export HOMEANGEL_TELEGRAM_BOT_TOKEN="<bot-token>"
+    routes: "bedroom=${HOMEANGEL_TELEGRAM_CHAT_ID}"
 ```
 
 Routes are comma-separated `selector=chat_id` pairs. Selectors may be
-`zone_label`, `device_id`, or `*`.
+`zone_label`, `device_id`, or `*`. A chat ID may be a literal value or an
+environment reference such as `${HOMEANGEL_TELEGRAM_CHAT_ID}`.
+
+Check whether Telegram is ready:
+
+```bash
+cd /workspace/labs/homeangel-ai
+./AngelStart --check-only
+```
 
 The demo console's family-phone panel has a text box and `Send` button for a
 manual text-only Telegram test. The message box stays empty while the local video

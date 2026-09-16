@@ -59,9 +59,9 @@ webhook_url: null
 
 alerts:
   telegram:
-    enabled: false
+    enabled: true
     token_env: HOMEANGEL_TELEGRAM_BOT_TOKEN
-    routes: null
+    routes: "bedroom=${HOMEANGEL_TELEGRAM_CHAT_ID}"
 
 vlm:
   enabled: false

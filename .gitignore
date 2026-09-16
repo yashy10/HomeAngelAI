@@ -3,6 +3,8 @@
 *.pid
 *.py[cod]
 __pycache__/
+.env
+.env.local
 
 # Local SDK/runtime state
 /.ghcr.io-sima-neat-sdk-v*/
@@ -19,6 +21,10 @@ __pycache__/
 /labs/homeangel-ai/build/
 /labs/homeangel-ai/libcompat/
 /labs/homeangel-ai/models/
+/labs/homeangel-ai/.env
+/labs/homeangel-ai/.env.local
+/labs/homeangel-ai/.env.*
+!/labs/homeangel-ai/.env.example
 /labs/homeangel-ai/events.log
 /labs/homeangel-ai/telemetry.json
 /labs/homeangel-ai/telemetry.json.tmp
